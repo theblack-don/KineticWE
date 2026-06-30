@@ -220,6 +220,20 @@ KCM.ScrollViewKCM {
             }
 
             QQC2.CheckBox {
+                id: invertScroll
+
+                text: i18n("Swap scroll modifiers for moving windows with desktop switch")
+                enabled: !kcm.virtualDesktopsSettings.isImmutable("invertScrollDesktopSwitch")
+                checked: kcm.virtualDesktopsSettings.invertScrollDesktopSwitch
+                onToggled: kcm.virtualDesktopsSettings.invertScrollDesktopSwitch = checked
+
+                KCM.SettingStateBinding {
+                    configObject: kcm.virtualDesktopsSettings
+                    settingName: "invertScrollDesktopSwitch"
+                }
+            }
+
+            QQC2.CheckBox {
                 id: perOutputVirtualDesktops
 
                 text: i18n("Switch desktops independently for each screen")

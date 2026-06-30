@@ -822,11 +822,62 @@ void VirtualDesktopManager::initShortcuts()
     input()->registerTouchscreenSwipeShortcut(SwipeDirection::Left, 3, m_swipeGestureReleasedX.get(), left);
     input()->registerTouchscreenSwipeShortcut(SwipeDirection::Right, 3, m_swipeGestureReleasedX.get(), right);
 
-    // axis events
-    input()->registerAxisShortcut(Qt::MetaModifier | Qt::AltModifier, PointerAxisDown,
-                                  findChild<QAction *>(QStringLiteral("Switch to Next Desktop")));
-    input()->registerAxisShortcut(Qt::MetaModifier | Qt::AltModifier, PointerAxisUp,
-                                  findChild<QAction *>(QStringLiteral("Switch to Previous Desktop")));
+    // axis events — both Meta+Alt and Meta scroll for desktop switching
+    // The toggle InvertScrollDesktopSwitch swaps which modifier does what:
+    //   DEFAULT (toggle OFF):
+    //     Meta+Alt+Scroll → switch only (current behavior)
+    //     Meta+Scroll     → switch + move active window
+    //   TOGGLED (toggle ON):
+    //     Meta+Alt+Scroll → switch + move active window
+    //     Meta+Scroll     → switch only
+
+    auto makeNextLambda = [this](bool defaultIsSwitchWithWindow) {
+        return [this, defaultIsSwitchWithWindow]() {
+            bool moveWindow = defaultIsSwitchWithWindow;
+            if (m_config) {
+                bool invert = m_config->group(QStringLiteral("Windows")).readEntry("InvertScrollDesktopSwitch", false);
+                moveWindow = defaultIsSwitchWithWindow ^ invert;
+            }
+            if (moveWindow) {
+                workspace()->slotWindowToNextDesktop();
+            } else {
+                slotNext();
+            }
+        };
+    };
+
+    auto makePrevLambda = [this](bool defaultIsSwitchWithWindow) {
+        return [this, defaultIsSwitchWithWindow]() {
+            bool moveWindow = defaultIsSwitchWithWindow;
+            if (m_config) {
+                bool invert = m_config->group(QStringLiteral("Windows")).readEntry("InvertScrollDesktopSwitch", false);
+                moveWindow = defaultIsSwitchWithWindow ^ invert;
+            }
+            if (moveWindow) {
+                workspace()->slotWindowToPreviousDesktop();
+            } else {
+                slotPrevious();
+            }
+        };
+    };
+
+    // Meta+Alt: default = switch only (defaultIsSwitchWithWindow = false)
+    auto *nextAltAction = new QAction(this);
+    connect(nextAltAction, &QAction::triggered, this, makeNextLambda(false));
+    input()->registerAxisShortcut(Qt::MetaModifier | Qt::AltModifier, PointerAxisDown, nextAltAction);
+
+    auto *prevAltAction = new QAction(this);
+    connect(prevAltAction, &QAction::triggered, this, makePrevLambda(false));
+    input()->registerAxisShortcut(Qt::MetaModifier | Qt::AltModifier, PointerAxisUp, prevAltAction);
+
+    // Meta only: default = switch + move window (defaultIsSwitchWithWindow = true)
+    auto *nextMetaAction = new QAction(this);
+    connect(nextMetaAction, &QAction::triggered, this, makeNextLambda(true));
+    input()->registerAxisShortcut(Qt::MetaModifier, PointerAxisDown, nextMetaAction);
+
+    auto *prevMetaAction = new QAction(this);
+    connect(prevMetaAction, &QAction::triggered, this, makePrevLambda(true));
+    input()->registerAxisShortcut(Qt::MetaModifier, PointerAxisUp, prevMetaAction);
 }
 
 void VirtualDesktopManager::gestureReleasedY()

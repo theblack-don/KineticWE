@@ -1,8 +1,9 @@
 # KineticWE
 
 > **This repository is a fork of [KWin](https://github.com/KDE/kwin) from the [KDE](https://kde.org) project.**
+>
+> KineticWE adds native tiling support while keeping the Destktop Enviroment Feel.**KineticWE** — a KWin Window Environment that pairs the [Noctalia](https://github.com/noctalia-dev/noctalia) shell with this compositor.
 
-KineticWE adds native tiling support to Kwin. It gives you a Desktop Environment like experience with Window Manager Features and Feel. Best of both worlds — a KWin Window Environment that pairs the [Noctalia](https://github.com/noctalia-dev/noctalia) shell with this compositor.
 
 ---
 
@@ -19,7 +20,11 @@ KineticWE adds native tiling support to Kwin. It gives you a Desktop Environment
 
 > ## 🤖 LLM-Generated Code Disclaimer
 >
+<<<<<<< HEAD
+> Portions of this project — including (but not limited to) installer scripts, build glue, configuration files, documentation, and some C++/QML/JS source files — were **authored with the assistance of LLM tools** (large language models coding assistants).
+=======
 > Portions of this project — including (but not limited to) installer scripts, build glue, configuration files, documentation, and some C++/QML/JS source files — were **authored with the assistance of AI tools** (large language models coding assistants).
+>>>>>>> master
 >
 > All LLM-generated content has been reviewed by the maintainers, but it has **not** been audited to the same standard as hand-written code. You may encounter:
 > - Subtle bugs or edge cases that a human author would have caught.
