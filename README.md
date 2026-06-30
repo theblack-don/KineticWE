@@ -20,7 +20,6 @@
 
 > ## 🤖 LLM-Generated Code Disclaimer
 >
-<<<<<<< HEAD
 > Portions of this project — including (but not limited to) installer scripts, build glue, configuration files, documentation, and some C++/QML/JS source files — were **authored with the assistance of LLM tools** (large language models coding assistants).
 =======
 > Portions of this project — including (but not limited to) installer scripts, build glue, configuration files, documentation, and some C++/QML/JS source files — were **authored with the assistance of AI tools** (large language models coding assistants).
