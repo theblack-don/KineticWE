@@ -123,6 +123,21 @@ KCM.SimpleKCM {
                 }
             }
 
+            QQC2.CheckBox {
+                id: enableAutoGrid
+                text: i18n("AutoGrid")
+                checked: kcm.settings.enabledLayouts.indexOf("AutoGrid") !== -1
+                onToggled: {
+                    let layouts = kcm.settings.enabledLayouts.slice();
+                    if (checked && layouts.indexOf("AutoGrid") === -1) {
+                        layouts.push("AutoGrid");
+                    } else if (!checked) {
+                        layouts = layouts.filter(l => l !== "AutoGrid");
+                    }
+                    kcm.settings.enabledLayouts = layouts;
+                }
+            }
+
             QQC2.Label {
                 visible: kcm.settings.enabledLayouts.length < 2
                 Kirigami.FormData.label: i18nc("@info", "Note:")
@@ -139,7 +154,8 @@ KCM.SimpleKCM {
                     { text: i18n("MasterStack"), value: "MasterStack" },
                     { text: i18n("Stacked"), value: "Stacked" },
                     { text: i18n("CenterTile"), value: "CenterTile" },
-                    { text: i18n("Monocle"), value: "Monocle" }
+                    { text: i18n("Monocle"), value: "Monocle" },
+                    { text: i18n("AutoGrid"), value: "AutoGrid" }
                 ]
                 textRole: "text"
                 valueRole: "value"
@@ -342,7 +358,8 @@ KCM.SimpleKCM {
                                         if (seen[i] === "MasterStack"
                                             || seen[i] === "Stacked"
                                             || seen[i] === "CenterTile"
-                                            || seen[i] === "Monocle") {
+                                            || seen[i] === "Monocle"
+                                            || seen[i] === "AutoGrid") {
                                             opts.push({ text: seen[i], value: seen[i] });
                                         }
                                     }
@@ -545,7 +562,8 @@ KCM.SimpleKCM {
                                         if (seen[i] === "MasterStack"
                                             || seen[i] === "Stacked"
                                             || seen[i] === "CenterTile"
-                                            || seen[i] === "Monocle") {
+                                            || seen[i] === "Monocle"
+                                            || seen[i] === "AutoGrid") {
                                             opts.push({ text: seen[i], value: seen[i] });
                                         }
                                     }

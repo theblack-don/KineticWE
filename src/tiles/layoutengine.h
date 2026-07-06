@@ -40,6 +40,7 @@ public:
         Stacked = 1,
         CenterTile = 2,
         Monocle = 3,
+        AutoGrid = 4,
     };
 
     static QString layoutKindToString(LayoutKind kind);

@@ -1105,6 +1105,16 @@ void Workspace::initShortcuts()
             m_tilingController->setLayout(LayoutEngine::LayoutKind::CenterTile);
         }
     }, true);
+    initShortcut("Tiling Switch To Monocle", i18n("Tiling Switch To Monocle"), QKeySequence(), [this]() {
+        if (m_tilingController) {
+            m_tilingController->setLayout(LayoutEngine::LayoutKind::Monocle);
+        }
+    }, true);
+    initShortcut("Tiling Switch To AutoGrid", i18n("Tiling Switch To AutoGrid"), QKeySequence(), [this]() {
+        if (m_tilingController) {
+            m_tilingController->setLayout(LayoutEngine::LayoutKind::AutoGrid);
+        }
+    }, true);
 
 #if KWIN_BUILD_TABBOX
     m_tabbox->initShortcuts();
