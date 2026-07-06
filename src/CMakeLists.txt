@@ -217,6 +217,7 @@ target_sources(kwin PRIVATE
     sm.cpp
     tablet_input.cpp
     tabletmodemanager.cpp
+    tiles/autogridlayoutengine.cpp
     tiles/centertilelayoutengine.cpp
     tiles/customtile.cpp
     tiles/layoutengine.cpp

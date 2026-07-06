@@ -149,6 +149,8 @@ void TilingCenterTileTest::cleanup()
     m_window2 = nullptr;
     m_window3 = nullptr;
     m_window4 = nullptr;
+
+    Test::destroyWaylandConnection();
 }
 
 void TilingCenterTileTest::createTiledWindow(std::unique_ptr<KWayland::Client::Surface> *surface,
@@ -160,16 +162,7 @@ void TilingCenterTileTest::createTiledWindow(std::unique_ptr<KWayland::Client::S
     *shellSurface = Test::createXdgToplevelSurface(surface->get());
     QVERIFY(*shellSurface);
 
-    QSignalSpy toplevelConfigureRequestedSpy(shellSurface->get(), &Test::XdgToplevel::configureRequested);
-    QSignalSpy surfaceConfigureRequestedSpy(shellSurface->get()->xdgSurface(), &Test::XdgSurface::configureRequested);
-    QVERIFY(surfaceConfigureRequestedSpy.wait());
-
-    Test::render(surface->get(), toplevelConfigureRequestedSpy.last().first().value<QSize>(), Qt::blue);
-    QVERIFY(Test::waylandSync());
-
-    QSignalSpy windowAddedSpy(workspace(), &Workspace::windowAdded);
-    QVERIFY(windowAddedSpy.wait());
-    *window = windowAddedSpy.last().first().value<Window *>();
+    *window = Test::renderAndWaitForShown(surface->get(), QSize(400, 300), Qt::blue);
     QVERIFY(*window);
 
     // Wait for the window to be actually tiled by the controller.
