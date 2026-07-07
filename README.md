@@ -5,13 +5,13 @@
 > KineticWE adds native tiling support while keeping the Destktop Enviroment Feel.**KineticWE** — a KWin Window Environment that pairs the [Noctalia](https://github.com/noctalia-dev/noctalia) shell with this compositor.
 
 
-## ❤️ Support the Project
+## ❤ Support the Project
 
 If you want to support this project, you can donate here: [Ko-fi — theblackdon](https://ko-fi.com/theblackdon)
 
 ---
 
-> ## ⚠️ BETA Stage
+> ## ⚠ BETA Stage
 >
 > **KineticWE is currently in BETA.**
 >
@@ -94,6 +94,7 @@ Pick the script that matches your distribution:
 | Arch Linux / Arch-derivatives | `./install-arch.sh` (manual build) |
 | Debian / Ubuntu | `./install-debian.sh` |
 | NixOS / Nix (flake) | — see below |
+| Gentoo | `./install-gentoo.sh` — uses the community Portage overlay |
 
 In all cases, by default binaries are installed to `$HOME/.local`. You can change this with the `INSTALL_PREFIX` environment variable:
 
@@ -183,6 +184,46 @@ A [Nix flake](https://nixos.wiki/wiki/Flakes) provides a reproducible build of k
 
 > **Note:** On the first build, Nix may error with a hash mismatch for `kglobalacceld-git`. Copy the expected hash from the error into `nix/kglobalacceld-git.nix` and rebuild. (This should be resolved)
 
+### Gentoo
+
+Gentoo installation is provided through a community-maintained Portage overlay:
+
+```text
+https://github.com/TwelfthFace/kineticwe-overlay
+```
+
+The recommended install method is to use the Gentoo installer script:
+
+```bash
+./install-gentoo.sh
+```
+
+The script will:
+
+* install `dev-vcs/git` if needed
+* install `app-eselect/eselect-repository` if needed
+* add the `kineticwe-overlay` Portage repository
+* sync the overlay
+* install `kde-plasma/kineticwe`
+
+Manual installation:
+
+```bash
+sudo emerge --ask app-eselect/eselect-repository dev-vcs/git
+sudo eselect repository add kineticwe-overlay git https://github.com/TwelfthFace/kineticwe-overlay.git
+sudo emaint sync -r kineticwe-overlay
+sudo emerge --ask kde-plasma/kineticwe
+```
+
+> **Note:** The Gentoo package is currently provided as a `9999` live ebuild.
+>
+> This means Portage builds KineticWE directly from the current upstream Git repository. Installing or updating the package may pull the latest development code, which can include new features, fixes, regressions, or breaking changes.
+>
+> In other words, the Gentoo package should currently be considered bleeding edge.
+>
+> Once KineticWE has stable tagged releases, the overlay will provide versioned ebuilds alongside the live `9999` ebuild.
+
+
 ---
 
 ## KWin is not...
@@ -230,3 +271,4 @@ A new Feature can only be added to KWin if:
 All new added features are under probation, that is if any of the non-functional requirements as listed above do not hold true in the next two feature releases, the added feature will be removed again.
 
 The same non functional requirements hold true for any kind of plugins (effects, scripts, etc.). It is suggested to use scripted plugins and distribute them separately.
+
