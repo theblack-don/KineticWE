@@ -22,7 +22,12 @@
     }:
     {
       # ---- cross-system modules --------------------------------------------
-      nixosModules.default = import ./nix/nixos-module.nix;
+      # Apply the overlay automatically so pkgs.kineticwe resolves when the
+      # module is imported from a flake-based NixOS config.
+      nixosModules.default = { ... }: {
+        imports = [ ./nix/nixos-module.nix ];
+        nixpkgs.overlays = [ self.overlays.default ];
+      };
       homeModules.default = import ./nix/home-module.nix;
 
       overlays.default = final: prev: {

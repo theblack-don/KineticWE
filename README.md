@@ -213,10 +213,19 @@ A [Nix flake](https://nixos.wiki/wiki/Flakes) provides a reproducible build of k
 }
 ```
 
-**Home Manager module:**
+**NixOS module (recommended — registers the Wayland session with SDDM/greetd):**
+```nix
+{
+  imports = [ inputs.kineticwe.nixosModules.default ];
+  programs.kineticwe.enable = true;
+}
+```
+
+**Home Manager module** (puts `start-kineticwe` on PATH; use the NixOS module so the greeter lists the session):
 ```nix
 {
   imports = [ inputs.kineticwe.homeModules.default ];
+  nixpkgs.overlays = [ inputs.kineticwe.overlays.default ];
   programs.kineticwe.enable = true;
 }
 ```

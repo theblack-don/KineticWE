@@ -1,14 +1,17 @@
 # NixOS module for KineticWE.
 #
-# Usage (configuration.nix):
+# Usage (flake-based configuration):
 #   {
 #     imports = [ inputs.kineticwe.nixosModules.default ];
 #     programs.kineticwe.enable = true;
 #   }
 #
-# This installs the session package system-wide and drops a
-# wayland-sessions desktop entry so SDDM / greetd can offer
-# "KineticWE" to all users.
+# The flake's nixosModules.default also applies the kineticwe overlay so
+# pkgs.kineticwe / pkgs.kwin-we / pkgs.noctalia resolve automatically.
+#
+# This installs the session package system-wide and registers it with
+# services.displayManager.sessionPackages so SDDM / greetd offer a real
+# Wayland session (not an X11 wrapper from displayManager.session).
 #
 { config, lib, pkgs, ... }:
 
@@ -21,7 +24,7 @@ in
 
     package = lib.mkOption {
       type = lib.types.package;
-      default = pkgs.kineticwe or (throw "programs.kineticwe.package is not set and pkgs.kineticwe is not available. Did you forget to apply the kineticwe overlay? Add `kineticwe.overlays.default` to `nixpkgs.overlays`.");
+      default = pkgs.kineticwe or (throw "programs.kineticwe.package is not set and pkgs.kineticwe is not available. Did you forget to apply the kineticwe overlay? Use inputs.kineticwe.nixosModules.default (which applies it), or add `kineticwe.overlays.default` to `nixpkgs.overlays`.");
       defaultText = lib.literalExpression "pkgs.kineticwe";
       description = ''
         The KineticWE session package providing `bin/start-kineticwe`.
@@ -31,15 +34,23 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [ cfg.package pkgs.kwin-we pkgs.noctalia ];
+    environment.systemPackages = [
+      cfg.package
+      pkgs.kwin-we
+      pkgs.noctalia
+    ];
 
-    # Register the session with the display manager so SDDM shows it
-    # in the session chooser. Using the session list directly (rather than
-    # sessionPackages) avoids type-check issues with unbuilt derivations.
-    services.xserver.displayManager.session = [{
-      name = "KineticWE";
-      manage = "desktop";
-      start = ''exec ${cfg.package}/bin/start-kineticwe'';
-    }];
+    # Register as a Wayland session. Requires passthru.providedSessions on
+    # the package (see nix/session.nix). Do NOT use the legacy
+    # services.xserver.displayManager.session list — that generates an X11
+    # session wrapper and login fails for a Wayland compositor.
+    services.displayManager.sessionPackages = [ cfg.package ];
+
+    # KDE portal backend for screenshots / screencast / file dialogs.
+    xdg.portal = {
+      enable = true;
+      extraPortals = [ pkgs.kdePackages.xdg-desktop-portal-kde ];
+      config.common.default = [ "kde" ];
+    };
   };
 }
