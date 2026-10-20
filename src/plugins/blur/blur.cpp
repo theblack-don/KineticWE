@@ -625,7 +625,12 @@ void BlurEffect::blur(const RenderTarget &renderTarget, const RenderViewport &vi
     const Rect backgroundRect = blurShape.boundingRect().rounded();
     const Rect scaledBackgroundRect = backgroundRect.scaled(viewport.scale()).rounded();
     const Rect deviceBackgroundRect = viewport.mapToDeviceCoordinates(backgroundRect).rounded();
-    const auto opacity = w->opacity() * data.opacity();
+    // Window opacity (window rules, inactive opacity) is applied to the window
+    // item that is painted over this blurred backdrop. Multiplying the blur
+    // alpha by it as well leaves the unblurred background visible instead of
+    // replacing it. Only effect paint opacity (e.g. fade animations) should
+    // modulate the blur strength.
+    const auto opacity = data.opacity();
 
     // Get the effective shape that will be actually blurred. It's possible that all of it will be clipped.
     QList<RectF> effectiveShape;
