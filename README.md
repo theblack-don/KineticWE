@@ -156,6 +156,8 @@ Used `./install-arch.sh --local-dev` before? See [docs/local-arch-dev.md](docs/l
 
 ### openSUSE (Tumbleweed & Slowroll)
 
+### openSUSE (OBS) — Recommended
+
 The easiest way to install KineticWE on openSUSE Tumbleweed or Slowroll is via the openSUSE Build Service (OBS).
 
 **For Tumbleweed:**
