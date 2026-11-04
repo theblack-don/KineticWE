@@ -6,10 +6,12 @@
 
 #include "overvieweffect.h"
 #include "effect/effecthandler.h"
+#include "input_event.h"
 #include "overviewconfig.h"
 #include "scene/item.h"
 #include "scene/windowitem.h"
 #include "scene/workspacescene.h"
+#include "virtualdesktops.h"
 #include "window.h"
 #include "workspace.h"
 
@@ -21,6 +23,7 @@
 #include <QQuickItem>
 #include <QTimer>
 
+#include <cmath>
 #include <limits>
 
 using namespace std::chrono_literals;
@@ -357,6 +360,23 @@ bool OverviewEffect::gridGestureInProgress() const
     return m_gridState->inProgress();
 }
 
+bool OverviewEffect::windowDragActive() const
+{
+    return m_windowDragActive;
+}
+
+void OverviewEffect::setWindowDragActive(bool active)
+{
+    if (m_windowDragActive == active) {
+        return;
+    }
+    m_windowDragActive = active;
+    if (!active) {
+        m_dragWheelAccumulator = 0;
+    }
+    Q_EMIT windowDragActiveChanged();
+}
+
 QPointF OverviewEffect::desktopOffsetForScreen(LogicalOutput *screen) const
 {
     return m_screenDesktopOffsets.value(screen, QPointF(0, 0));
@@ -384,11 +404,55 @@ bool OverviewEffect::borderActivated(ElectricBorder border)
     return false;
 }
 
+void OverviewEffect::pointerAxis(PointerAxisEvent *event)
+{
+    if (m_gridState->status() != EffectTogglableState::Status::Active || !m_windowDragActive || event->modifiers != Qt::NoModifier) {
+        QuickSceneEffect::pointerAxis(event);
+        return;
+    }
+
+    qreal delta = event->deltaV120 != 0 ? event->deltaV120 / 120.0 : event->delta / 15.0;
+    if (event->inverted) {
+        delta = -delta;
+    }
+    if (delta == 0) {
+        QuickSceneEffect::pointerAxis(event);
+        return;
+    }
+
+    if (std::signbit(delta) != std::signbit(m_dragWheelAccumulator)) {
+        m_dragWheelAccumulator = 0;
+    }
+    m_dragWheelAccumulator += delta;
+
+    LogicalOutput *output = workspace()->outputAt(event->position);
+    if (!output) {
+        output = workspace()->activeOutput();
+    }
+
+    const bool wrap = VirtualDesktopManager::self()->isNavigationWrappingAround();
+    while (std::abs(m_dragWheelAccumulator) >= 1.0) {
+        const bool next = m_dragWheelAccumulator > 0;
+        m_dragWheelAccumulator += next ? -1.0 : 1.0;
+
+        VirtualDesktop *current = VirtualDesktopManager::self()->currentDesktop(output);
+        VirtualDesktop *target = VirtualDesktopManager::self()->inDirection(current, next ? VirtualDesktopManager::Direction::Next : VirtualDesktopManager::Direction::Previous, wrap);
+        if (target == current) {
+            m_dragWheelAccumulator = 0;
+            break;
+        }
+        VirtualDesktopManager::self()->setCurrent(target, output);
+    }
+}
+
 void OverviewEffect::activate()
 {
     if (effects->isScreenLocked()) {
         return;
     }
+
+    setWindowDragActive(false);
+    m_dragWheelAccumulator = 0;
 
     updateViewGeometries();
     m_overviewState->activate();
@@ -398,12 +462,16 @@ void OverviewEffect::activate()
 void OverviewEffect::deactivate()
 {
     const auto screens = effects->screens();
+    setWindowDragActive(false);
+    m_dragWheelAccumulator = 0;
     m_shutdownTimer->start(animationDuration());
     m_overviewState->deactivate();
 }
 
 void OverviewEffect::deactivateNow()
 {
+    setWindowDragActive(false);
+    m_dragWheelAccumulator = 0;
     m_shutdownTimer->stop();
     m_overviewState->deactivate();
     setRunning(false);

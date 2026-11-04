@@ -45,7 +45,6 @@ FocusScope {
     property var showOnly: []
 
     required property bool organized
-    property var desktop: null
     property bool asynchronous: true
     readonly property bool effectiveOrganized: expoLayout.ready && organized
     property bool dragActive: false
@@ -142,12 +141,6 @@ FocusScope {
             }
 
             onObjectRemoved: (index, object) => {
-                if (heap.desktop && !heap.asynchronous && object.window
-                        && !heap.containsDND(object.window.internalId)
-                        && object.window.desktops.length > 0
-                        && object.window.desktops.indexOf(heap.desktop) === -1) {
-                    object.saveDND();
-                }
                 // undo explicitly set parent in objectAdded so it can be
                 // removed from the scene immediately
                 object.parent = null
@@ -156,7 +149,7 @@ FocusScope {
             onObjectAdded: (index, object) => {
                 object.parent = expoLayout
                 var key = object.window.internalId;
-                if (heap.asynchronous && heap.containsDND(key)) {
+                if (heap.containsDND(key)) {
                     expoLayout.forceLayout();
                     var oldGlobalRect = heap.restoreDND(key);
                     object.restoreDND(oldGlobalRect);
@@ -167,10 +160,9 @@ FocusScope {
                     expoLayout.forceLayout();
                 }
                 object.animationEnabled = true;
-                // In Grid View the heap updates synchronously. The source heap
-                // saves the window rect when it removes the old delegate, which
-                // can happen after this delegate is created; check again once
-                // the model update settles.
+                // The drag source saves the window rect before dropping it. In
+                // case the target delegate is created before that save lands,
+                // check again once the model update settles.
                 Qt.callLater(function() {
                     if (!object || !object.parent || !heap.containsDND(key)) {
                         return;

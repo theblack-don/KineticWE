@@ -47,6 +47,11 @@ stdenv.mkDerivation rec {
     "-DBUILD_TESTING=OFF"
   ];
 
+  # Library only (libkdecoration), no applications to wrap. Without this the
+  # Qt hook aborts: "this derivation depends on qtbase, but no wrapping
+  # behavior was specified".
+  dontWrapQtApps = true;
+
   meta = with lib; {
     description = "KDE Window Manager decorations library (git master, for KineticWE)";
     homepage = "https://invent.kde.org/plasma/kdecoration";

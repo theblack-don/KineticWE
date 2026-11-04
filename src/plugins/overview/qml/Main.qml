@@ -706,8 +706,13 @@ FocusScope {
                         animationEnabled:  (gridVal !== 0 || mainBackground.current) && organized
                         organized: gridVal > 0 ? false : container.state !== "initial"
                         dndManagerStore: desktopGrid.dndManagerStore
-                        desktop: mainBackground.desktop
                         asynchronous: gridVal === 0
+                        Binding {
+                            target: effect
+                            property: "windowDragActive"
+                            value: dragActive && container.gridVal > 0
+                            restoreMode: Binding.RestoreNone
+                        }
                         model: KWinComponents.WindowFilterModel {
                             activity: KWinComponents.Workspace.currentActivity
                             desktop: mainBackground.desktop

@@ -30,6 +30,7 @@ class OverviewEffect : public QuickSceneEffect
     Q_PROPERTY(bool transitionGestureInProgress READ transitionGestureInProgress NOTIFY transitionGestureInProgressChanged)
     Q_PROPERTY(qreal gridPartialActivationFactor READ gridPartialActivationFactor NOTIFY gridPartialActivationFactorChanged)
     Q_PROPERTY(bool gridGestureInProgress READ gridGestureInProgress NOTIFY gridGestureInProgressChanged)
+    Q_PROPERTY(bool windowDragActive READ windowDragActive WRITE setWindowDragActive NOTIFY windowDragActiveChanged)
 
 public:
     OverviewEffect();
@@ -46,11 +47,14 @@ public:
     bool transitionGestureInProgress() const;
     qreal gridPartialActivationFactor() const;
     bool gridGestureInProgress() const;
+    bool windowDragActive() const;
+    void setWindowDragActive(bool active);
     QPointF desktopOffset() const;
     Q_INVOKABLE QPointF desktopOffsetForScreen(LogicalOutput *screen) const;
 
     int requestedEffectChainPosition() const override;
     bool borderActivated(ElectricBorder border) override;
+    void pointerAxis(PointerAxisEvent *event) override;
     void reconfigure(ReconfigureFlags flags) override;
     Rect viewInputGeometry(LogicalOutput *screen) const override;
     bool acceptsInputAt(LogicalOutput *screen, const QPoint &pos) const override;
@@ -63,6 +67,7 @@ Q_SIGNALS:
     void transitionGestureInProgressChanged();
     void gridPartialActivationFactorChanged();
     void gridGestureInProgressChanged();
+    void windowDragActiveChanged();
     void ignoreMinimizedChanged();
     void desktopOffsetChanged(KWin::LogicalOutput *screen);
 
@@ -94,6 +99,8 @@ private:
     QMetaObject::Connection m_windowAddedConnection;
     int m_oldCursorZ = 1;
     bool m_overviewRaised = false;
+    bool m_windowDragActive = false;
+    qreal m_dragWheelAccumulator = 0;
 
     QTimer *m_shutdownTimer;
     QList<ElectricBorder> m_borderActivate;
