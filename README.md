@@ -42,7 +42,7 @@ The recommended way to install KineticWE on Fedora is via [COPR](https://copr.fe
 COPR provides pre-built RPMs, so you don't need to compile from source.
 
 ```bash
-sudo dnf copr enable linuxgamerlife/lgl-experimental
+sudo dnf copr enable theblackdon/kwee
 sudo dnf install kineticwe
 ```
 
@@ -69,18 +69,35 @@ kineticwe-setup-greeter
 
 Then reboot.
 
+### [UNINSTALL KineticV1 INSTRUCTIONS]
+1. login to a KDE or KineticWE session
+2. `systemctl set-default multi-user.target` (TTY after reboot)
+3. `reboot`
+4. login
+5. `sudo dnf copr remove theblackdon/kineticwe`
+6. `sudo dnf copr remove lionheartp/Hyprland`
+7. `sudo rpm -e --nodeps kineticwe plasma-desktop plasma-workspace kwin kwin-libs kwin-common`
+8. `sudo dnf upgrade --refresh`
+9. `sudo dnf group install kde-desktop`
+10. `systemctl set-default graphical.target`
+11. `reboot` 
+
 ### Arch Linux
 
 #### Binary repo (recommended)
 
 The fastest way to install KineticWE on Arch-based distros (Arch, CachyOS, EndeavourOS, Manjaro, etc.) is the pre-built binary repo hosted on GitLab Pages — no compiling needed.
 
-Packages are signed with the KineticWE repo key `FD258A99CDC5F61B04A335EEE163D34B273AE987`. Trust it once:
+Packages are signed with the KineticWE repo key `FD258A99CDC5F61B04A335EEE163D34B273AE987`. Download it, check the fingerprint, and trust it once:
 
 ```bash
-sudo pacman-key --recv-keys FD258A99CDC5F61B04A335EEE163D34B273AE987 --keyserver hkps://keys.openpgp.org
+curl -fLO https://theblackdon.gitlab.io/kineticwe/kineticwe.gpg
+gpg --show-keys kineticwe.gpg          # must show FD258A99CDC5F61B04A335EEE163D34B273AE987
+sudo pacman-key --add kineticwe.gpg
 sudo pacman-key --lsign-key FD258A99CDC5F61B04A335EEE163D34B273AE987
 ```
+
+(If GitLab Pages is unreachable, fetch the key from a keyserver instead of the first three lines: `sudo pacman-key --recv-keys FD258A99CDC5F61B04A335EEE163D34B273AE987 --keyserver hkps://keys.openpgp.org`.)
 
 Add the repo to `/etc/pacman.conf` (e.g. `sudo nano /etc/pacman.conf`):
 
@@ -92,12 +109,12 @@ Server = https://theblackdon.gitlab.io/kineticwe/$arch
 and install:
 
 ```bash
-sudo pacman -Sy kineticwe-keyring kineticwe
+sudo pacman -Syu kineticwe-keyring kineticwe
 ```
 
 This also pulls in the `xdg-desktop-portal-kwe` portal backend and the `kineticwe-noctalia` shell. `kineticwe-keyring` keeps the repo key up to date, so future key changes arrive as normal updates.
 
-Already using the repo with `SigLevel = Never`? Run the two `pacman-key` commands above, install `kineticwe-keyring`, then delete the `SigLevel = Never` line.
+Already using the repo with `SigLevel = Never`? Trust the key as above, install `kineticwe-keyring`, then delete the `SigLevel = Never` line.
 
 Optionally, install the Noctalia greeter (greetd) and run its interactive setup (it asks for `sudo` itself when needed):
 
@@ -106,39 +123,45 @@ sudo pacman -S kineticwe-greeter
 kineticwe-setup-greeter
 ```
 
+> **Heads-up: "breaks dependency 'qt6-base=…'" during `pacman -Syu`? Don't panic, just wait.**
+>
+> KineticWE has to be rebuilt for each new Qt version. When Arch ships a new Qt, `pacman -Syu` may stop with an error like this:
+>
+> ```
+> :: installing qt6-base (6.x.y-1) breaks dependency 'qt6-base=6.x.x' required by kineticwe
+> ```
+>
+> That's expected, and your system is fine. The repo checks for new Qt versions **every 12 hours** and rebuilds automatically, and the build itself can take a couple more hours. **Please wait at least 12 hours** and run `sudo pacman -Syu` again before opening an issue. In most cases it will just work by then.
+>
+> Please don't force it with `--overwrite`, `-dd`, or `--ignore qt6-base`. That gives you a partial upgrade, and KineticWE may not start afterwards. If it still fails after a day, [open an issue](https://gitlab.com/theblackdon/kineticwe/-/issues) and we'll take a look.
+
 #### Build from source
 
-To build the split packages (`kineticwe`, `xdg-desktop-portal-kwe`, `kineticwe-noctalia`, `kineticwe-greeter`) from your working tree and install them with pacman:
+> **Warning:** A source build only works with the exact Qt version it was built against, because KWin uses Qt's private APIs. **After every Qt update from Arch, run `./install-arch.sh --update` before you log back in.** If you skip it, KineticWE may crash or fail to start. The binary repo avoids this: it's rebuilt regularly for new Qt versions, and pacman won't install a new Qt until the matching KineticWE build is published (see the heads-up above).
+
+Build and install everything (compositor, portal, shell and greeter):
 
 ```bash
 ./install-arch.sh
 ```
 
-Already have a display manager you want to keep (e.g. SDDM from Plasma or GDM from GNOME)? Add `--no-greeter`: `kineticwe-greeter` isn't built or installed, and your login screen is left alone.
+The script shows what it will do and asks before starting.
+
+**Keeping your current login screen** (e.g. SDDM or GDM): add `--no-greeter`. If `kineticwe-greeter` is already installed, remove it first with `sudo pacman -R kineticwe-greeter`.
 
 ```bash
 ./install-arch.sh --no-greeter
 ```
 
-If `kineticwe-greeter` is already installed, remove it first (`sudo pacman -R kineticwe-greeter`): it requires the exact `kineticwe` version, so `kineticwe` can't be rebuilt without it.
-
-After that first install, rebuild only when something changed:
+**Updating:** after a `git pull` or a Qt update, run:
 
 ```bash
 ./install-arch.sh --update
 ```
 
-`--update` compares each component's sources (compositor, portal, shell, greeter; uncommitted edits count) with what they were last built from and exits without building anything when nothing changed. Otherwise it rebuilds all packages together, because they require each other's exact version. The build uses ccache (kept in `build.arch-pkg/ccache`), so code that didn't change compiles from the cache; the first build only fills it. A Qt update counts as a change for the compositor and the portal.
+If nothing changed, it exits right away. Otherwise it rebuilds. Rebuilds after the first one are much faster.
 
-The script shows what it will do and asks before starting. Pass `--yes` to skip the question (required when it isn't run from a terminal).
-
-For a development loop that installs into `~/.local` instead (`--local-dev`), see [docs/local-arch-dev.md](docs/local-arch-dev.md).
-
-> **Note:** KWin uses Qt private APIs, so a source build is tied to the exact Qt version it was built against. After every Arch Qt update, rebuild (the binary repo is rebuilt automatically for this).
-
-> **Note:** The Fedora spec (`lgl-kineticwe-copr/kineticwe.spec`) is the source of truth for the version, release and pinned commits. Builds always use the spec's values; if the committed `PKGBUILD` lags behind, the build prints a warning and continues. Run `arch/sync-from-spec.sh PKGBUILD` to update it. Changes beyond version and pins (dependencies, files, patches) still need a manual `PKGBUILD` edit.
-
-Used an older version of the script (`build-arch-native.sh`, `--full`, `--binary`, `--kwin-only`, `--noct-only`)? See [docs/arch-migration.md](docs/arch-migration.md).
+**More options:** `./install-arch.sh --help`. For a development setup that installs into `~/.local`, see [docs/local-arch-dev.md](docs/local-arch-dev.md). Coming from the old `build-arch-native.sh`? See [docs/arch-migration.md](docs/arch-migration.md).
 
 #### Setting up the greeter
 

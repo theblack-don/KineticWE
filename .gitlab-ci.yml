@@ -3,7 +3,7 @@
 # Triggers (plain branch pushes never run a pipeline - see workflow:rules):
 #   * tag push ................... release build, pkgrel exactly as committed
 #   * schedule "abi-watch" ....... (WATCH=1, every 12h, cron "0 */12 * * *",
-#                                  target branch kineticwe-2.0) compares the
+#                                  target branch master) compares the
 #                                  published kineticwe-abi.txt with the branch
 #                                  and current Arch (ci/abi-watch.sh) and, only
 #                                  when non-doc code changed since the built
@@ -57,7 +57,8 @@
 # kineticwe-noctalia, kineticwe-greeter); all four are published here, plus
 # kineticwe-keyring from arch/kineticwe-keyring/.
 #
-# Users trust the key once (pacman-key --recv-keys + --lsign-key), then add
+# Users trust the key once (pacman-key --add kineticwe.gpg from Pages, or
+# --recv-keys from a keyserver, then --lsign-key), then add
 # this to /etc/pacman.conf (pacman's default SigLevel requires signatures):
 #   [kineticwe]
 #   Server = https://theblackdon.gitlab.io/kineticwe/$arch
@@ -206,8 +207,9 @@ build-package:
       git archive --format=tar.gz --prefix="kineticwe-$pkgver/" -o /home/builder/kineticwe-src.tar.gz HEAD
     - cp PKGBUILD kineticwe.install kineticwe-greeter.install /home/builder/ && chown -R builder:builder /home/builder
     # KWE_ABI_PIN=1: pin the exact qt6-base version (see PKGBUILD _kwe_qt_pin).
+    # KWE_REPO_BUILD=1: kineticwe depends on kineticwe-keyring (built below).
     # KWE_BUILD: only build/package the split packages in the build set.
-    - runuser -u builder -- env KWE_ABI_PIN=1 KWE_BUILD="$KWE_BUILD" KWE_LOCAL_TARBALL=/home/builder/kineticwe-src.tar.gz bash -c 'cd /home/builder && makepkg -f --nodeps --noconfirm'
+    - runuser -u builder -- env KWE_ABI_PIN=1 KWE_REPO_BUILD=1 KWE_BUILD="$KWE_BUILD" KWE_LOCAL_TARBALL=/home/builder/kineticwe-src.tar.gz bash -c 'cd /home/builder && makepkg -f --nodeps --noconfirm'
     # Repo keyring package (arch=any, no dependencies).
     - cp -r arch/kineticwe-keyring /home/builder/keyring && chown -R builder:builder /home/builder/keyring
     - runuser -u builder -- bash -c 'cd /home/builder/keyring && makepkg -f --nodeps --noconfirm'
@@ -274,18 +276,24 @@ pages:
       <title>KineticWE pacman repo</title>
       <h1>KineticWE pacman repo</h1>
       <p>Packages are signed with key <code>@FPR@</code>
-      (check it against the project README). Trust it once:</p>
-      <pre>sudo pacman-key --recv-keys @FPR@ --keyserver hkps://keys.openpgp.org
+      (check it against the project README). Download it, check the fingerprint, and trust it once:</p>
+      <pre>curl -fLO @PAGES_URL@/kineticwe.gpg
+      gpg --show-keys kineticwe.gpg          # must show @FPR@
+      sudo pacman-key --add kineticwe.gpg
       sudo pacman-key --lsign-key @FPR@</pre>
-      <p>If the keyserver is unreachable, download <a href="kineticwe.gpg">kineticwe.gpg</a>
-      and run <code>sudo pacman-key --add kineticwe.gpg</code>, then lsign as above.</p>
+      <p>If this site is unreachable, use a keyserver instead of the first three lines:
+      <code>sudo pacman-key --recv-keys @FPR@ --keyserver hkps://keys.openpgp.org</code></p>
       <p>Add this to <code>/etc/pacman.conf</code>:</p>
       <pre>[kineticwe]
       Server = @PAGES_URL@/$arch</pre>
-      <p>Then: <code>sudo pacman -Sy kineticwe-keyring kineticwe</code> (pulls in
+      <p>Then: <code>sudo pacman -Syu kineticwe-keyring kineticwe</code> (pulls in
       <code>xdg-desktop-portal-kwe</code> and <code>kineticwe-noctalia</code>)</p>
       <p>Optional greeter: <code>sudo pacman -S kineticwe-greeter</code>, then
       run <code>kineticwe-setup-greeter</code></p>
+      <p>If <code>pacman -Syu</code> reports <code>breaks dependency 'qt6-base=…'</code>,
+      a rebuild for the new Qt is on its way. Please wait at least 12 hours before
+      opening an <a href="https://gitlab.com/theblackdon/kineticwe/-/issues">issue</a>,
+      and don't force it with <code>-dd</code> or <code>--ignore</code>.</p>
       HTML
     # Quoted heredoc keeps pacman's literal $arch; fill in this project's URL.
     - sed -i "s|@PAGES_URL@|${CI_PAGES_URL:?Pages not enabled}|" public/index.html

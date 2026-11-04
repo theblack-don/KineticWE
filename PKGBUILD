@@ -405,8 +405,8 @@ package_kineticwe() {
     license=('GPL-2.0-or-later' 'LGPL-2.0-or-later' 'MIT' 'BSD-3-Clause' 'CC0-1.0')
     install=kineticwe.install
     depends=(
-        "kineticwe-noctalia=$epoch:$pkgver-$pkgrel"
-        "xdg-desktop-portal-kwe=$epoch:$pkgver-$pkgrel"
+        "kineticwe-noctalia=$epoch:$pkgver"
+        "xdg-desktop-portal-kwe=$epoch:$pkgver"
         'milou'
         # The window decoration is the first-party org.kineticwe.decoration
         # plugin; neither breeze nor the distro kdecoration is required.
@@ -493,6 +493,12 @@ package_kineticwe() {
         'xcb-util-wm'
     )
     _kwe_qt_pin
+    # CI repo builds (KWE_REPO_BUILD=1) pull in the repo keyring so key
+    # rotations/revocations reach every binary-repo user; local builds
+    # (install-arch.sh) don't build it and must not require it.
+    if [[ "${KWE_REPO_BUILD:-}" == 1 ]]; then
+        depends+=('kineticwe-keyring')
+    fi
     optdepends=(
         'qt5ct: Qt5 theming in the KineticWE session'
         'pipewire-pulse: PulseAudio-compatible audio (conflicts with pulseaudio)'
@@ -665,7 +671,7 @@ package_kineticwe-greeter() {
     license=('MIT')
     install=kineticwe-greeter.install
     depends=(
-        "kineticwe=$epoch:$pkgver-$pkgrel"
+        "kineticwe=$epoch:$pkgver"
         'greetd'
         'wlroots0.20'
         'wayland'
