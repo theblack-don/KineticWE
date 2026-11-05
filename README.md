@@ -176,3 +176,29 @@ Enabling `greetd.service` on its own is not enough: Arch's default greetd config
 #### Migrating from a local (`~/.local`) build to the packages
 
 Used `./install-arch.sh --local-dev` before? See [docs/local-arch-dev.md](docs/local-arch-dev.md#migrating-from-a-local-local-build-to-the-packages) to remove the dev install after switching to the packages.
+
+### openSUSE (Tumbleweed & Slowroll)
+
+### openSUSE (OBS) — Recommended
+
+The easiest way to install KineticWE on openSUSE Tumbleweed or Slowroll is via the openSUSE Build Service (OBS).
+
+**For Tumbleweed:**
+```bash
+sudo zypper addrepo https://download.opensuse.org/repositories/home:benyx31:kineticwe/openSUSE_Tumbleweed/home:benyx31:kineticwe.repo
+sudo zypper refresh
+sudo zypper install kineticwe
+```
+
+**For Slowroll:**
+```bash
+sudo zypper addrepo https://download.opensuse.org/repositories/home:benyx31:kineticwe/openSUSE_Slowroll/home:benyx31:kineticwe.repo
+sudo zypper refresh
+sudo zypper install kineticwe
+```
+
+Optionally, install the Noctalia greeter and run its setup:
+```bash
+sudo zypper install kineticwe-greeter
+kineticwe-setup-greeter
+```
