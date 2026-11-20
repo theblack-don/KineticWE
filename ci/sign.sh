@@ -4,8 +4,9 @@
 #   GNUPGHOME=<empty dir> sign.sh <keyring-dir> <pkg.tar.zst>...
 #
 # KWE_SIGNING_KEY holds the secret signing subkey(s), exported with
-# "gpg --export-secret-subkeys <primary> | base64 -w0" so it fits a masked,
-# protected CI/CD variable (protected: only protected branches/tags sign).
+# "gpg --export-secret-subkeys <primary> | base64 -w0" so it fits a secret in
+# the GitHub `release` environment (only tags/master can use it, so only those
+# sign).
 # The key must belong to the primary fingerprint in <keyring-dir>/kineticwe-trusted,
 # and <keyring-dir>/kineticwe.gpg must be that same key, so CI can never sign
 # with a key users were not told to trust.

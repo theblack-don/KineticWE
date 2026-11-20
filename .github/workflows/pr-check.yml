@@ -1,0 +1,102 @@
+# Pull request check: lints the shell scripts and workflows, then builds
+# every package (kineticwe, xdg-desktop-portal-kwe, kineticwe-noctalia,
+# kineticwe-greeter, kineticwe-keyring) on current Arch exactly like a
+# release build, minus signing and publishing (KWE_PUBLISH unset).
+#
+# Fork PRs run without secrets: the packages are unsigned and nothing is
+# published. Runs for first-time contributors wait for a maintainer to
+# approve them (Actions tab, "Approve and run").
+#
+# Testing a PR's packages: open the run, download the
+# kineticwe-packages-<PR number> artifact (kept 7 days), unzip it and
+#   sudo pacman -U *.pkg.tar.zst
+# They are unsigned; pacman -U on local files accepts that with the default
+# LocalFileSigLevel.
+
+name: PR check
+
+on:
+  pull_request:
+    branches: [master]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - '*.md'
+  workflow_dispatch:
+
+# A new push to the PR cancels the previous, now outdated run.
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash -n
+        run: |
+          for f in ci/*.sh arch/*.sh install-arch.sh build-rpm-dev.sh build-deb-stable.sh; do
+            bash -n "$f"
+          done
+      # shellcheck is preinstalled on ubuntu runners. Errors only, so the
+      # scripts' existing style warnings don't block PRs.
+      - name: shellcheck
+        run: shellcheck --severity=error ci/*.sh arch/*.sh
+      # Pinned version, so a new actionlint release can't break PRs overnight.
+      - name: actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+  build:
+    needs: lint
+    runs-on: ubuntu-latest
+    # a cold kwin build takes ~2h on a hosted runner; leave headroom
+    timeout-minutes: 300
+    container:
+      image: archlinux:base-devel
+      # ubuntu-latest has only ~14 GB free, tight for kwin + deps + ccache.
+      # Container steps cannot reach the host filesystem, so mount the big
+      # preinstalled toolchains we never use and empty them below.
+      options: >-
+        -v /usr/share/dotnet:/hostfree/dotnet
+        -v /usr/local/lib/android:/hostfree/android
+        -v /opt/hostedtoolcache:/hostfree/toolcache
+    steps:
+      - name: Free runner disk
+        run: |
+          rm -rf /hostfree/dotnet/* /hostfree/android/* /hostfree/toolcache/*
+          df -h
+      # Same as arch-repo.yml: fresh keyring, full upgrade (never a partial
+      # "pacman -Sy <pkg>"), and git before checkout so it makes a real .git.
+      - name: Sync Arch
+        run: |
+          pacman-key --init 2>/dev/null || true
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Su --noconfirm
+          pacman -S --noconfirm --needed git
+      - uses: actions/checkout@v4
+      # Restore only: PRs read master's newest ccache but never save one, so
+      # they can't evict it from the 10 GB cache quota. The key never exists;
+      # the prefix restore-key picks the newest build-cache-<run id>.
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            .ccache
+            .pkg-cache
+          key: build-cache-pr-${{ github.run_id }}
+          restore-keys: build-cache-
+      # No KWE_PUBLISH and no secrets: build all packages, unsigned, local only.
+      - name: Build
+        run: ci/build-package.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kineticwe-packages-${{ github.event.pull_request.number || github.run_number }}
+          path: out/x86_64/*.pkg.tar.zst
+          retention-days: 7
+          if-no-files-found: error

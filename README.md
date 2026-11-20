@@ -84,30 +84,30 @@ Then reboot.
 The following instructions are maintained by community contributors. They are
 not part of the official Fedora COPR release and may lag behind the latest
 changes. If a command fails, please
-[open an issue](https://gitlab.com/theblackdon/kineticwe/-/issues).
+[open an issue](https://github.com/theblack-don/KineticWE/issues).
 
 ### Arch Linux
 
 #### Binary repo (recommended)
 
-The fastest way to install KineticWE on Arch-based distros (Arch, CachyOS, EndeavourOS, Manjaro, etc.) is the pre-built binary repo hosted on GitLab Pages — no compiling needed.
+The fastest way to install KineticWE on Arch-based distros (Arch, CachyOS, EndeavourOS, Manjaro, etc.) is the pre-built binary repo hosted on GitHub Releases — no compiling needed.
 
 Packages are signed with the KineticWE repo key `FD258A99CDC5F61B04A335EEE163D34B273AE987`. Download it, check the fingerprint, and trust it once:
 
 ```bash
-curl -fLO https://theblackdon.gitlab.io/kineticwe/kineticwe.gpg
+curl -fLO https://github.com/theblack-don/KineticWE/releases/download/repo/kineticwe.gpg
 gpg --show-keys kineticwe.gpg          # must show FD258A99CDC5F61B04A335EEE163D34B273AE987
 sudo pacman-key --add kineticwe.gpg
 sudo pacman-key --lsign-key FD258A99CDC5F61B04A335EEE163D34B273AE987
 ```
 
-(If GitLab Pages is unreachable, fetch the key from a keyserver instead of the first three lines: `sudo pacman-key --recv-keys FD258A99CDC5F61B04A335EEE163D34B273AE987 --keyserver hkps://keys.openpgp.org`.)
+(If GitHub is unreachable, fetch the key from a keyserver instead of the first three lines: `sudo pacman-key --recv-keys FD258A99CDC5F61B04A335EEE163D34B273AE987 --keyserver hkps://keys.openpgp.org`.)
 
 Add the repo to `/etc/pacman.conf` (e.g. `sudo nano /etc/pacman.conf`):
 
 ```ini
 [kineticwe]
-Server = https://theblackdon.gitlab.io/kineticwe/$arch
+Server = https://github.com/theblack-don/KineticWE/releases/download/repo
 ```
 
 and install:
@@ -117,6 +117,8 @@ sudo pacman -Syu kineticwe-keyring kineticwe
 ```
 
 This also pulls in the `xdg-desktop-portal-kwe` portal backend and the `kineticwe-noctalia` shell. `kineticwe-keyring` keeps the repo key up to date, so future key changes arrive as normal updates.
+
+> **Coming from the old GitLab repo?** Replace the old `Server = https://theblackdon.gitlab.io/kineticwe/$arch` line in `/etc/pacman.conf` with the new one above (note: no `/$arch` at the end), then run `sudo pacman -Syu`. The signing key is the same, so there is nothing to re-trust. The old GitLab repo no longer receives updates.
 
 Already using the repo with `SigLevel = Never`? Trust the key as above, install `kineticwe-keyring`, then delete the `SigLevel = Never` line.
 
@@ -137,7 +139,7 @@ kineticwe-setup-greeter
 >
 > That's expected, and your system is fine. The repo checks for new Qt versions **every 12 hours** and rebuilds automatically, and the build itself can take a couple more hours. **Please wait at least 12 hours** and run `sudo pacman -Syu` again before opening an issue. In most cases it will just work by then.
 >
-> Please don't force it with `--overwrite`, `-dd`, or `--ignore qt6-base`. That gives you a partial upgrade, and KineticWE may not start afterwards. If it still fails after a day, [open an issue](https://gitlab.com/theblackdon/kineticwe/-/issues) and we'll take a look.
+> Please don't force it with `--overwrite`, `-dd`, or `--ignore qt6-base`. That gives you a partial upgrade, and KineticWE may not start afterwards. If it still fails after a day, [open an issue](https://github.com/theblack-don/KineticWE/issues) and we'll take a look.
 
 #### Build from source
 
@@ -210,7 +212,9 @@ kineticwe-setup-greeter
 KineticWE ships a flake that builds the compositor, the Noctalia shell, the
 session launcher, and the portal backend. The first build compiles KWin, so it
 can take a while. The flake builds the branch it is fetched from;
-`gitlab:theblackdon/kineticwe` resolves the stable `master` branch.
+`github:theblack-don/KineticWE` resolves the stable `master` branch. Moving from the
+old `gitlab:theblackdon/kineticwe` input? Change the URL, then run
+`nix flake update kineticwe` once so your `flake.lock` follows it.
 
 #### NixOS (recommended)
 
@@ -220,7 +224,7 @@ Add the flake as an input:
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    kineticwe.url = "gitlab:theblackdon/kineticwe";
+    kineticwe.url = "github:theblack-don/KineticWE";
   };
 
   outputs = { self, nixpkgs, kineticwe, ... }: {
@@ -251,11 +255,11 @@ Install the session and its runtime packages into your profile:
 
 ```bash
 nix profile install \
-  gitlab:theblackdon/kineticwe#kinetic-we \
-  gitlab:theblackdon/kineticwe#noctalia \
-  gitlab:theblackdon/kineticwe#kdecoration \
-  gitlab:theblackdon/kineticwe#kglobalacceld \
-  gitlab:theblackdon/kineticwe#session
+  github:theblack-don/KineticWE#kinetic-we \
+  github:theblack-don/KineticWE#noctalia \
+  github:theblack-don/KineticWE#kdecoration \
+  github:theblack-don/KineticWE#kglobalacceld \
+  github:theblack-don/KineticWE#session
 ```
 
 The session entry is installed at

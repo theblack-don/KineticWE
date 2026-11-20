@@ -1,0 +1,253 @@
+# KineticWE binary pacman repo, built on Arch and hosted as the assets of one
+# rolling GitHub release (tag "repo", prerelease, never "latest").
+#
+# Triggers (plain branch pushes never run this workflow):
+#   * tag push v* ................ release build, pkgrel exactly as committed
+#   * schedule "0 */12 * * *" .... abi-watch: compares the published
+#                                  kineticwe-abi.txt with master and current
+#                                  Arch (ci/abi-watch.sh) and, only when
+#                                  non-doc code changed since the built commit,
+#                                  Qt / private-API KF6 versions changed or a
+#                                  linked soname is gone, dispatches one
+#                                  task=build rebuild=true run on master, with
+#                                  kwe_build naming the affected packages
+#   * rebuild=true ............... rebuild against current Arch; pkgrel gets a
+#                                  .YYYYMMDDHHMM suffix so pacman offers it as
+#                                  an upgrade (e.g. 15 -> 15.202608031200)
+#   * schedule "30 5 * * *" ...... smoke test: installs the published packages
+#                                  on a fully updated Arch container and checks
+#                                  every library resolves; a failure emails you
+#   * Actions -> Arch repo -> Run workflow: on-demand build / watch / smoke;
+#                                  fill kwe_build to rebuild only some packages
+# Both schedules only run when the repo variable KWE_SCHEDULES is "1", so
+# forks stay quiet unless they opt in.
+#
+# Partial rebuilds: KWE_BUILD (input kwe_build) is a comma-separated subset of
+# the four split packages (e.g. "kineticwe-noctalia,kineticwe-greeter");
+# empty builds all four, and tag pushes (without rebuild) always build all
+# four. The PKGBUILD only builds/packages the listed ones. Because each publish
+# replaces the whole repo, every package NOT rebuilt is carried over from the
+# currently published release (ci/fetch-published.sh, with its .sig). Race
+# guard: if the Qt / KF6 versions the published build was made against
+# (kineticwe-abi.txt "version" lines) differ from this container's, kineticwe
+# and xdg-desktop-portal-kwe are added to the set. kineticwe-keyring is always
+# rebuilt (cheap, arch=any). All of this lives in ci/build-package.sh.
+#
+# CI builds set KWE_ABI_PIN=1, so kineticwe and xdg-desktop-portal-kwe depend
+# on the exact qt6-base version they were built with (Qt private API). Users'
+# pacman -Syu holds a Qt update until the matching rebuild is published.
+#
+# Signing (ci/sign.sh): packages and the database are signed with the repo's
+# signing subkey from the secret KWE_SIGNING_KEY, which only exists in the
+# "release" environment (master + v* tags only, so PRs and other branches
+# never see it). It must belong to the key in arch/kineticwe-keyring/. Without
+# it the repo is published unsigned; set KWE_REQUIRE_SIGNING=1 once signing is
+# live so that becomes an error instead.
+#
+# Hosting: the release tagged $KWE_REPO_TAG ("repo") holds the package files
+# and .sig, kineticwe.db / .files (+ .tar.gz, + .sig, real copies, no
+# symlinks), kineticwe-abi.txt and kineticwe.gpg. URLs derive from
+# github.repository, so a fork reads and publishes its own repo. Users trust
+# the key once (pacman-key --add kineticwe.gpg, or --recv-keys from a
+# keyserver, then --lsign-key), then add this to /etc/pacman.conf:
+#   [kineticwe]
+#   Server = https://github.com/<owner>/<repo>/releases/download/repo
+# (no $arch: release assets are flat, the repo is x86_64 only).
+#
+# ONE-TIME SETUP (maintainer, GitHub web UI):
+#   1. Settings -> Environments -> New environment "release".
+#      Deployment branches and tags: "Selected branches and tags" -> add
+#      branch "master" and tag pattern "v*". Add the environment secret
+#      KWE_SIGNING_KEY = output of
+#        gpg --export-secret-subkeys <primary> | base64 -w0
+#   2. Settings -> Secrets and variables -> Actions -> Variables (repository):
+#        KWE_SCHEDULES=1        enables the 12h abi-watch and the daily smoke
+#                               test (leave unset in forks)
+#        KWE_REQUIRE_SIGNING=1  once a signed publish has worked
+#   3. Settings -> Actions -> General -> Workflow permissions: leave the
+#      default (read); every job below requests the permissions it needs.
+#   4. Notifications: GitHub emails scheduled-run failures to the user who
+#      last edited the cron lines of this file, so that user gets the
+#      abi-watch / smoke failure mails.
+#   5. Testing: Actions -> Arch repo -> Run workflow, with task "build"
+#      (optionally kwe_build / rebuild), "watch" (tick watch_force to make
+#      abi-watch dispatch a rebuild even with nothing changed) or "smoke".
+
+name: Arch repo
+
+on:
+  push:
+    tags: ['v*']
+  schedule:
+    - cron: '0 */12 * * *'   # abi-watch (+ keepalive)
+    - cron: '30 5 * * *'     # smoke test
+  workflow_dispatch:
+    inputs:
+      task:
+        description: 'What to run'
+        type: choice
+        options: [build, watch, smoke]
+        default: build
+      kwe_build:
+        description: 'build: comma-separated packages to rebuild (empty = all)'
+        type: string
+        required: false
+      rebuild:
+        description: 'build: ABI rebuild (pkgrel gets a .YYYYMMDDHHMM suffix)'
+        type: boolean
+        default: false
+      reason:
+        description: 'build: rebuild reason (logged)'
+        type: string
+        required: false
+      watch_force:
+        description: 'watch: dispatch a rebuild even if nothing changed'
+        type: boolean
+        default: false
+
+# Read-only by default; jobs widen only what they need.
+permissions:
+  contents: read
+
+env:
+  KEEP_BUILDS: "4"   # how many package versions to keep in the repo
+  KWE_REPO_TAG: repo
+  KWE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}/releases/download/repo
+
+jobs:
+  abi-watch:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '0 */12 * * *' && vars.KWE_SCHEDULES == '1')
+      || (github.event_name == 'workflow_dispatch' && inputs.task == 'watch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write   # POST .../workflows/arch-repo.yml/dispatches
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history to diff the branch against the built commit
+      # bsdtar reads the Arch databases; jq, curl and git are preinstalled.
+      - name: Install bsdtar
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+      - name: ABI watch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KWE_WATCH_FORCE: ${{ inputs.watch_force && '1' || '' }}
+        run: ci/abi-watch.sh "$KWE_REPO_URL/kineticwe-abi.txt"
+
+  # GitHub disables scheduled workflows after 60 days without repository
+  # activity. Re-enabling via the API on every scheduled run keeps abi-watch
+  # and the smoke test alive without dummy commits.
+  keepalive:
+    if: github.event_name == 'schedule' && github.event.schedule == '0 */12 * * *' && vars.KWE_SCHEDULES == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/arch-repo.yml/enable"
+
+  build-package:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.task == 'build')
+    runs-on: ubuntu-latest
+    # a cold kwin build takes ~2h on a hosted runner; leave headroom
+    timeout-minutes: 300
+    # KWE_SIGNING_KEY lives here; the environment only admits master and v*.
+    environment: release
+    # Each publish replaces the whole repo, so runs publish one at a time.
+    # GitHub keeps only ONE pending run per group: a newer pending run
+    # replaces an older pending one, which is fine since the newest rebuild
+    # wins anyway. A running publish is never cancelled.
+    concurrency:
+      group: arch-repo
+      cancel-in-progress: false
+    permissions:
+      contents: write   # create/update the "repo" release and its assets
+    container:
+      image: archlinux:base-devel
+      # ubuntu-latest has only ~14 GB free, tight for kwin + deps + ccache.
+      # Container steps cannot reach the host filesystem, so mount the big
+      # preinstalled toolchains we never use and empty them below.
+      options: >-
+        -v /usr/share/dotnet:/hostfree/dotnet
+        -v /usr/local/lib/android:/hostfree/android
+        -v /opt/hostedtoolcache:/hostfree/toolcache
+    steps:
+      - name: Free runner disk
+        run: |
+          rm -rf /hostfree/dotnet/* /hostfree/android/* /hostfree/toolcache/*
+          df -h
+      # Fresh keyring first (avoids the classic expired-key CI failure), then
+      # a full system upgrade (Arch never supports partial upgrades, so never
+      # "pacman -Sy <pkg>" alone). git before checkout so actions/checkout
+      # makes a real .git (it falls back to a REST tarball without git);
+      # git archive in ci/build-package.sh needs it.
+      - name: Sync Arch
+        run: |
+          # fresh containers have no local secret key; without this the
+          # keyring post-install hook prints a scary (but harmless) error
+          pacman-key --init 2>/dev/null || true
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Su --noconfirm
+          pacman -S --noconfirm --needed git
+      - uses: actions/checkout@v4
+      # Caches are immutable: save under a per-run key, restore the newest
+      # one by prefix. ccache drops recurring (ABI-refresh) builds to ~20 min.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .ccache
+            .pkg-cache
+          key: build-cache-${{ github.run_id }}
+          restore-keys: build-cache-
+      # inputs.* are empty on a tag push: full release build, as intended.
+      # rebuild is a boolean from the UI but the string 'true' when abi-watch
+      # dispatches it through the API; accept both.
+      - name: Build and publish
+        env:
+          KWE_PUBLISH: "1"
+          KWE_BUILD: ${{ inputs.kwe_build }}
+          KWE_REBUILD: ${{ (inputs.rebuild == true || inputs.rebuild == 'true') && '1' || '' }}
+          KWE_REBUILD_REASON: ${{ inputs.reason }}
+          KWE_SIGNING_KEY: ${{ secrets.KWE_SIGNING_KEY }}
+          KWE_REQUIRE_SIGNING: ${{ vars.KWE_REQUIRE_SIGNING }}
+          GH_TOKEN: ${{ github.token }}
+        run: ci/build-package.sh
+
+  # If this fails, GitHub emails you: either a library the published binaries
+  # need is gone from current Arch (soname bump; ldd cannot see Qt
+  # private-API breaks, the exact qt6-base pin and abi-watch cover those) ->
+  # rebuild via Actions -> Arch repo -> Run workflow (task build, rebuild);
+  # or the signing subkey is about to expire -> renew it as the key-expiry
+  # message says and update KWE_SIGNING_KEY.
+  smoke-test:
+    if: >-
+      (github.event_name == 'schedule' && github.event.schedule == '30 5 * * *' && vars.KWE_SCHEDULES == '1')
+      || (github.event_name == 'workflow_dispatch' && inputs.task == 'smoke')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    container:
+      image: archlinux:latest
+    steps:
+      - name: Sync Arch
+        run: |
+          pacman-key --init 2>/dev/null || true
+          pacman -Sy --noconfirm archlinux-keyring
+          pacman -Su --noconfirm
+          pacman -S --noconfirm --needed git
+      - uses: actions/checkout@v4
+      - name: Signing key expiry
+        run: ci/key-expiry.sh arch/kineticwe-keyring
+      # Run even when the expiry check failed, so both problems show up.
+      - name: Smoke test
+        if: ${{ !cancelled() }}
+        env:
+          KWE_REQUIRE_SIGNING: ${{ vars.KWE_REQUIRE_SIGNING }}
+        run: ci/smoke.sh "$KWE_REPO_URL"

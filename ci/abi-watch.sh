@@ -2,7 +2,7 @@
 # Decide whether the published repo needs a rebuild, and of which packages,
 # and trigger one.
 # Cheap enough to run every few hours: needs only bash, curl, jq, bsdtar and git
-# (alpine), run from a full-history checkout of the watched branch.
+# (the ubuntu-latest runner), run from a full-history checkout of the watched branch.
 #
 #   abi-watch.sh <manifest-url or local file> [--dry-run]
 #
@@ -17,7 +17,8 @@
 #       kineticwe-greeter.install,
 #       arch/kineticwe-setup-greeter.sh           -> kineticwe-greeter
 #       PKGBUILD, lgl-kineticwe-copr/*, ci/*,
-#       .gitlab-ci.yml, arch/sync-from-spec.sh    -> all
+#       .github/workflows/arch-repo.yml,
+#       arch/sync-from-spec.sh                    -> all
 #       arch/kineticwe-keyring/*                  -> none (always built), but
 #                                                    keyring-only changes -> all
 #       anything else                             -> kineticwe
@@ -33,13 +34,15 @@
 # A missing manifest (first run, or a repo published before this script)
 # also triggers a full rebuild, which publishes one.
 #
-# Triggering needs KWE_TRIGGER_TOKEN (pipeline trigger token) plus GitLab's
-# predefined CI_API_V4_URL and CI_PROJECT_ID. The rebuild runs on the watched
-# branch (the schedule's ref, CI_COMMIT_REF_NAME) with REBUILD=1, so an ABI
-# refresh also ships the branch tip. All reasons go into one trigger, and the
-# package set into KWE_BUILD (comma-separated, always listed explicitly, even
-# when it is every package); packages not listed are carried over from the
-# published repo.
+# Triggering is a workflow_dispatch of .github/workflows/arch-repo.yml
+# (override the file name with KWE_WORKFLOW) and needs GH_TOKEN (actions:
+# write) plus GitHub's predefined GITHUB_REPOSITORY, GITHUB_REF_NAME and
+# GITHUB_API_URL. The rebuild runs on the watched branch (the schedule's ref,
+# GITHUB_REF_NAME) with task=build and rebuild=true (KWE_REBUILD=1), so an ABI
+# refresh also ships the branch tip. All reasons go into one dispatch, and the
+# package set into kwe_build / KWE_BUILD (comma-separated, always listed
+# explicitly, even when it is every package); packages not listed are carried
+# over from the published repo.
 # --dry-run prints the decision and never triggers.
 # KWE_WATCH_FORCE=1 always requests a full rebuild (tests the trigger path).
 set -euo pipefail
@@ -63,7 +66,7 @@ need() {
 }
 need_all() { need "${all_pkgs[@]}"; }
 
-ref="${CI_COMMIT_REF_NAME:-$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)}"
+ref="${GITHUB_REF_NAME:-$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)}"
 
 trigger() {
     local reason p build_list=
@@ -81,17 +84,21 @@ trigger() {
         echo ">> --dry-run: not triggering (ref $ref)"
         return 0
     fi
-    : "${KWE_TRIGGER_TOKEN:?KWE_TRIGGER_TOKEN not set; cannot trigger the rebuild}"
-    : "${CI_API_V4_URL:?}" "${CI_PROJECT_ID:?}" "${CI_COMMIT_REF_NAME:?no ref to rebuild}"
-    echo ">> Triggering REBUILD=1 pipeline on $ref"
+    : "${GH_TOKEN:?GH_TOKEN not set; cannot trigger the rebuild}"
+    : "${GITHUB_REPOSITORY:?}" "${GITHUB_REF_NAME:?no ref to rebuild}"
+    local api="${GITHUB_API_URL:-https://api.github.com}"
+    local workflow="${KWE_WORKFLOW:-arch-repo.yml}" body
+    # workflow_dispatch inputs are strings; the workflow accepts "true".
+    body=$(jq -n --arg ref "$ref" --arg build "$build_list" --arg reason "${reason:0:1000}" \
+        '{ref: $ref, inputs: {task: "build", rebuild: "true", kwe_build: $build, reason: $reason}}')
+    echo ">> Dispatching $workflow (task=build, rebuild=true) on $ref"
     curl -sSf -X POST \
-        --form-string "token=$KWE_TRIGGER_TOKEN" \
-        --form-string "ref=$ref" \
-        --form-string "variables[REBUILD]=1" \
-        --form-string "variables[KWE_BUILD]=$build_list" \
-        --form-string "variables[KWE_REBUILD_REASON]=${reason:0:1000}" \
-        "$CI_API_V4_URL/projects/$CI_PROJECT_ID/trigger/pipeline" >/dev/null
-    echo ">> Rebuild pipeline created"
+        -H "Authorization: Bearer $GH_TOKEN" \
+        -H "Accept: application/vnd.github+json" \
+        -H "X-GitHub-Api-Version: 2022-11-28" \
+        -d "$body" \
+        "$api/repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/dispatches" >/dev/null
+    echo ">> Rebuild workflow dispatched"
 }
 
 echo ">> Fetching manifest $manifest_url"
@@ -140,7 +147,7 @@ else
                 portal/*) need xdg-desktop-portal-kwe ;;
                 kineticwe-greeter.install | arch/kineticwe-setup-greeter.sh)
                     need kineticwe-greeter ;;
-                PKGBUILD | lgl-kineticwe-copr/* | .gitlab-ci.yml | ci/* | arch/sync-from-spec.sh)
+                PKGBUILD | lgl-kineticwe-copr/* | .github/workflows/arch-repo.yml | ci/* | arch/sync-from-spec.sh)
                     need_all ;;
                 *) need kineticwe ;;
             esac

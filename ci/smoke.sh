@@ -7,7 +7,7 @@
 # from the repo or any shipped ELF has an unresolvable library.
 set -euo pipefail
 
-server="${1:?usage: smoke.sh <repo-server-url>}"   # e.g. https://theblackdon.gitlab.io/kineticwe/x86_64
+server="${1:?usage: smoke.sh <repo-server-url>}"   # e.g. https://github.com/<owner>/<repo>/releases/download/repo
 # Trusted key comes from the checkout, not from the server being checked.
 keyring_dir="$(cd "$(dirname "$0")/../arch/kineticwe-keyring" && pwd)"
 work="$(mktemp -d)"
@@ -132,7 +132,7 @@ done < <(find root/usr -type f \( -name '*.so*' -o -perm -u+x \))
 
 if ((fail)); then
     echo '>> SMOKE TEST FAILED: binary no longer links against current Arch.'
-    echo '>> Trigger a rebuild: GitLab -> Build -> Pipelines -> Run pipeline.'
+    echo '>> Trigger a rebuild: GitHub -> Actions -> Arch repo -> Run workflow (task: build).'
     exit 1
 fi
 echo '>> SMOKE TEST PASSED'

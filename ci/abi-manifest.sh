@@ -76,8 +76,8 @@ upstream_version() {
 }
 
 echo "# kineticwe ABI manifest v2, generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo "ref ${CI_COMMIT_TAG:-${CI_COMMIT_REF_NAME:?CI_COMMIT_REF_NAME not set}}"
-echo "commit ${CI_COMMIT_SHA:?CI_COMMIT_SHA not set}"
+echo "ref ${GITHUB_REF_NAME:?GITHUB_REF_NAME not set}"
+echo "commit ${GITHUB_SHA:?GITHUB_SHA not set}"
 for pkg in "${tier1[@]}"; do
     echo "version $pkg $(upstream_version "$pkg")"
 done

@@ -189,10 +189,11 @@ source=(
     "kglobalacceld-$_kglobalacceld_commit.tar.gz::https://invent.kde.org/plasma/kglobalacceld/-/archive/$_kglobalacceld_commit/kglobalacceld-$_kglobalacceld_commit.tar.gz"
     "kdecoration-$_kdecoration_commit.tar.gz::https://invent.kde.org/plasma/kdecoration/-/archive/$_kdecoration_commit/kdecoration-$_kdecoration_commit.tar.gz"
     "kconfig-$_kconfig_commit.tar.gz::https://invent.kde.org/frameworks/kconfig/-/archive/$_kconfig_commit/kconfig-$_kconfig_commit.tar.gz"
-    "noctalia-greeter-kwe-$_greeter_commit.tar.gz::https://gitlab.com/theblackdon/noctalia-greeter-kwe/-/archive/$_greeter_commit/noctalia-greeter-kwe-$_greeter_commit.tar.gz"
+    "Kineticwe-greeter-$_greeter_commit.tar.gz::https://github.com/theblack-don/Kineticwe-greeter/archive/$_greeter_commit.tar.gz"
 )
-# GitLab archive tarballs are regenerated on demand and are not byte-stable,
-# so checksums are skipped; every source is pinned to an exact commit instead.
+# GitLab / GitHub archive tarballs are regenerated on demand and are not
+# byte-stable, so checksums are skipped; every source is pinned to an exact
+# commit instead.
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 _sourcebase="$pkgbase-$pkgver"
@@ -243,7 +244,8 @@ prepare() {
     _kwe_normalize "kglobalacceld-$_kglobalacceld_commit" kglobalacceld
     _kwe_normalize "kdecoration-$_kdecoration_commit" kdecoration
     _kwe_normalize "kconfig-$_kconfig_commit" kconfig
-    _kwe_normalize "noctalia-greeter-kwe-$_greeter_commit" noctalia-greeter
+    # GitHub archive: top-level dir is <RepoName>-<commit>
+    _kwe_normalize "Kineticwe-greeter-$_greeter_commit" noctalia-greeter
 
     # Rebrand kdecoration translations so they coexist with the stock package.
     sed -i \

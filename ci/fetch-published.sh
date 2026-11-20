@@ -4,9 +4,10 @@
 #
 #   fetch-published.sh <repo-server-url> <dest-dir> <pkgname>...
 #
-# Used by partial CI rebuilds (KWE_BUILD): the pages deploy replaces the whole
-# repo, so every package that was NOT rebuilt is carried over from the
-# currently published repo before ci/repo.sh rebuilds the database.
+# Used by partial CI rebuilds (KWE_BUILD): every package that was NOT rebuilt
+# is carried over from the currently published repo, so ci/repo.sh (which
+# rebuilds the database from the files in one directory) and
+# ci/abi-manifest.sh see the whole repo, not just the rebuilt packages.
 # The db is parsed like ci/smoke.sh does (%NAME% / %VERSION% / %FILENAME% of
 # each */desc, newest per name by vercmp).
 #
@@ -17,7 +18,7 @@ set -euo pipefail
 
 die() { echo "fetch-published: $*" >&2; exit 1; }
 
-server="${1:?usage: fetch-published.sh <repo-server-url> <dest-dir> <pkgname>...}"   # e.g. https://theblackdon.gitlab.io/kineticwe/x86_64
+server="${1:?usage: fetch-published.sh <repo-server-url> <dest-dir> <pkgname>...}"   # e.g. https://github.com/<owner>/<repo>/releases/download/repo
 dest="${2:?usage: fetch-published.sh <repo-server-url> <dest-dir> <pkgname>...}"
 shift 2
 (($# > 0)) || die "no packages given"
