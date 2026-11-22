@@ -171,6 +171,9 @@
       <min>0</min>
       <max>1000</max>
     </entry>
+    <entry name="emergeAppWidths" key="EmergeAppWidths" type="StringList">
+      <label>Per-app Emerge column widths as windowClass=fraction entries (for example firefox=0.5). The window class is matched exactly and case-insensitively.</label>
+    </entry>
   </group>
   <group name="TilingRules">
     <entry name="floatingClasses" key="FloatingClass" type="StringList">

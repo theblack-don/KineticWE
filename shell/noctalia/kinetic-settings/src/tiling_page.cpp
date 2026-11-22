@@ -485,6 +485,17 @@ const std::vector<TilingPage::Field>& TilingPage::fields() {
         .valueSuffix = " px",
         .fallback = Value{48},
     });
+    f.push_back(Field{
+        .group = "Tiling",
+        .key = "EmergeAppWidths",
+        .control = ControlKind::EmergeAppWidths,
+        .title = "Emerge: app column widths",
+        .subtitle = "Open a matching app at a fixed column width. The window class is matched exactly "
+                    "(case-insensitive); applies to open and newly opened windows, and a manual resize "
+                    "overrides it.",
+        .pageGroup = "Emerge",
+        .fallback = Value{std::vector<std::string>{}},
+    });
     // Window Rules -------------------------------------------------------------
     f.push_back(Field{
         .group = "TilingRules",
@@ -935,6 +946,9 @@ TilingPage::buildControl(const Field& field, float scale, const Callbacks& callb
   case ControlKind::LayoutToggles:
     // Rendered by buildLayoutTogglesBlock() instead of the generic row path.
     return ui::node({});
+  case ControlKind::EmergeAppWidths:
+    // Rendered by buildEmergeAppWidthsBlock() instead of the generic row path.
+    return ui::node({});
   }
   return ui::node({});
 }
@@ -1040,6 +1054,188 @@ std::unique_ptr<Node> TilingPage::buildLayoutTogglesBlock(
     list->addChild(std::move(row));
   }
   block->addChild(std::move(list));
+  return block;
+}
+
+// The EmergeAppWidths StringList as a block: header with an interactive window
+// detect, then one row per app (class label, width select, delete). Modeled on
+// buildLayoutTogglesBlock().
+std::unique_ptr<Node> TilingPage::buildEmergeAppWidthsBlock(
+    const Field& field, float scale, std::string_view armedResetKey, const Callbacks& callbacks
+) {
+  const auto entries = std::get<std::vector<std::string>>(effectiveValue(field));
+  const std::string path = keyPath(field);
+
+  auto block = ui::column({
+      .align = FlexAlign::Stretch,
+      .gap = Style::spaceXs * scale,
+      .fillWidth = true,
+  });
+
+  auto titleRow = ui::row({.align = FlexAlign::Center, .gap = Style::spaceSm * scale, .fillWidth = true});
+  titleRow->addChild(makeLabel(
+      field.title, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurface), FontWeight::Bold
+  ));
+  titleRow->addChild(ui::spacer());
+  if (overridden(field)) {
+    titleRow->addChild(makeOverrideBadge(scale));
+    titleRow->addChild(makeResetButton(path, armedResetKey == path, scale, callbacks));
+  }
+  titleRow->addChild(ui::button({
+      .text = "Detect window",
+      .fontSize = Style::fontSizeBody * scale,
+      .variant = ButtonVariant::Primary,
+      .minHeight = Style::controlHeight * scale,
+      .paddingV = Style::spaceSm * scale,
+      .paddingH = Style::spaceMd * scale,
+      .radius = Style::scaledRadiusMd(scale),
+      .onClick = [this, field, callbacks]() {
+        // Blocks until the compositor finishes the interactive window pick.
+        const auto detected = m_dbus.queryWindowInfo();
+        if (!detected.valid) {
+          m_detectNotice = "Window detection cancelled or failed.";
+          if (callbacks.requestRebuild) {
+            callbacks.requestRebuild();
+          }
+          return;
+        }
+        if (detected.resourceClass.empty()) {
+          m_detectNotice = "That window has no window class.";
+          if (callbacks.requestRebuild) {
+            callbacks.requestRebuild();
+          }
+          return;
+        }
+        std::vector<std::string> next = std::get<std::vector<std::string>>(effectiveValue(field));
+        const bool present = std::ranges::any_of(next, [&detected](const std::string& entry) {
+          const auto separator = entry.rfind('=');
+          const std::string windowClass = StringUtils::trim(
+              separator == std::string::npos ? std::string_view(entry) : std::string_view(entry).substr(0, separator)
+          );
+          return StringUtils::equalsInsensitive(windowClass, detected.resourceClass);
+        });
+        if (!present) {
+          next.push_back(detected.resourceClass + "=0.5");
+        }
+        m_detectNotice.clear();
+        stageAndRebuild(field, Value{std::move(next)}, callbacks);
+      },
+  }));
+
+  auto copy = ui::column({.align = FlexAlign::Start, .gap = Style::spaceXs * scale, .flexGrow = 1.0F});
+  copy->addChild(std::move(titleRow));
+  if (!field.subtitle.empty()) {
+    copy->addChild(makeLabel(
+        field.subtitle, Style::fontSizeCaption * scale, colorSpecFromRole(ColorRole::OnSurfaceVariant)
+    ));
+  }
+  auto headRow = ui::row(
+      {.align = FlexAlign::Center,
+       .justify = FlexJustify::SpaceBetween,
+       .gap = Style::spaceXs * scale,
+       .paddingV = 2.0F * scale,
+       .fillWidth = true}
+  );
+  headRow->addChild(std::move(copy));
+  block->addChild(std::move(headRow));
+
+  if (entries.empty()) {
+    block->addChild(makeLabel(
+        "No per-app widths yet. Use Detect window and click the app.", Style::fontSizeCaption * scale,
+        colorSpecFromRole(ColorRole::OnSurfaceVariant)
+    ));
+  }
+
+  static const std::vector<std::string> kWidthValues{"0.333", "0.5", "0.667", "1"};
+  static const std::vector<std::string> kWidthLabels{"33%", "50%", "67%", "100%"};
+
+  auto list = ui::column({
+      .align = FlexAlign::Stretch,
+      .gap = Style::spaceXs * scale,
+      .paddingH = Style::spaceLg * scale,
+      .fillWidth = true,
+  });
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    const std::string& entry = entries[i];
+    const auto separator = entry.rfind('=');
+    const std::string windowClass = StringUtils::trim(
+        separator == std::string::npos ? std::string_view(entry) : std::string_view(entry).substr(0, separator)
+    );
+    const std::string fraction = separator == std::string::npos
+        ? std::string()
+        : StringUtils::trim(std::string_view(entry).substr(separator + 1));
+
+    std::vector<std::string> options = kWidthValues;
+    std::vector<std::string> labels = kWidthLabels;
+    std::size_t selectedIndex = options.size();
+    const auto known = std::ranges::find(options, fraction);
+    if (known != options.end()) {
+      selectedIndex = static_cast<std::size_t>(known - options.begin());
+    } else {
+      // Keep a hand-edited value selectable instead of snapping it to a preset.
+      options.push_back(fraction);
+      labels.push_back(fraction.empty() ? std::string("custom") : fraction + " (custom)");
+      selectedIndex = options.size() - 1;
+    }
+
+    auto row = ui::row({
+        .align = FlexAlign::Center,
+        .justify = FlexJustify::SpaceBetween,
+        .gap = Style::spaceSm * scale,
+        .paddingV = 2.0F * scale,
+        .fillWidth = true,
+    });
+    auto labelColumn = ui::column({.align = FlexAlign::Start, .flexGrow = 1.0F});
+    labelColumn->addChild(
+        makeLabel(windowClass, Style::fontSizeBody * scale, colorSpecFromRole(ColorRole::OnSurface))
+    );
+    row->addChild(std::move(labelColumn));
+
+    auto actions = ui::row({.align = FlexAlign::Center, .gap = Style::spaceXs * scale});
+    actions->addChild(ui::select({
+        .options = labels,
+        .selectedIndex = selectedIndex,
+        .fontSize = Style::fontSizeBody * scale,
+        .controlHeight = Style::controlHeight * scale,
+        .glyphSize = Style::fontSizeBody * scale,
+        .width = kDefaultControlWidth * scale,
+        .height = Style::controlHeight * scale,
+        .onSelectionChanged = [this, field, entries, i, windowClass, options, callbacks](
+                                  std::size_t index, std::string_view /*label*/
+                              ) {
+          if (index >= options.size()) {
+            return;
+          }
+          std::vector<std::string> next = entries;
+          next[i] = windowClass + "=" + options[index];
+          stageAndRebuild(field, Value{std::move(next)}, callbacks);
+        },
+    }));
+    actions->addChild(ui::button({
+        .glyph = "trash",
+        .fontSize = Style::fontSizeCaption * scale,
+        .glyphSize = Style::fontSizeBody * scale,
+        .variant = ButtonVariant::Ghost,
+        .minWidth = Style::controlHeight * scale,
+        .minHeight = Style::controlHeight * scale,
+        .padding = Style::spaceXs * scale,
+        .radius = Style::scaledRadiusMd(scale),
+        .onClick = [this, field, entries, i, callbacks]() {
+          std::vector<std::string> next = entries;
+          next.erase(next.begin() + static_cast<std::ptrdiff_t>(i));
+          stageAndRebuild(field, Value{std::move(next)}, callbacks);
+        },
+    }));
+    row->addChild(std::move(actions));
+    list->addChild(std::move(row));
+  }
+  block->addChild(std::move(list));
+
+  if (!m_detectNotice.empty()) {
+    block->addChild(makeLabel(
+        m_detectNotice, Style::fontSizeCaption * scale, colorSpecFromRole(ColorRole::Error)
+    ));
+  }
   return block;
 }
 
@@ -1593,10 +1789,16 @@ TilingPage::build(float scale, const Filter& filter, std::string_view armedReset
         addGapToggleActionRow(*currentBody, scale, callbacks);
       }
     }
-    if (field.control == ControlKind::LayoutToggles) {
+    switch (field.control) {
+    case ControlKind::LayoutToggles:
       currentBody->addChild(buildLayoutTogglesBlock(field, scale, armedResetKey, callbacks));
-    } else {
+      break;
+    case ControlKind::EmergeAppWidths:
+      currentBody->addChild(buildEmergeAppWidthsBlock(field, scale, armedResetKey, callbacks));
+      break;
+    default:
       addSettingRow(*currentBody, field, scale, armedResetKey, callbacks);
+      break;
     }
     anyRows = true;
   }

@@ -98,6 +98,7 @@ public:
     m_loaded = false;
     m_pending.clear();
     m_pendingDesktopOverrides.clear();
+    m_detectNotice.clear();
   }
 
 private:
@@ -108,6 +109,8 @@ private:
     Text,
     // The EnabledLayouts StringList rendered as one toggle per layout.
     LayoutToggles,
+    // The EmergeAppWidths StringList rendered as per-app rows with Detect.
+    EmergeAppWidths,
   };
 
   struct Field {
@@ -169,6 +172,10 @@ private:
   buildControl(const Field& field, float scale, const Callbacks& callbacks);
   [[nodiscard]] std::unique_ptr<Node>
   buildLayoutTogglesBlock(const Field& field, float scale, std::string_view armedResetKey, const Callbacks& callbacks);
+  [[nodiscard]] std::unique_ptr<Node>
+  buildEmergeAppWidthsBlock(
+      const Field& field, float scale, std::string_view armedResetKey, const Callbacks& callbacks
+  );
   void buildRuntimeGroup(Flex& parent, float scale, const Callbacks& callbacks);
 
   // Per-monitor gap overrides ([Tiling][Output <active>]). The compositor lets
@@ -229,6 +236,9 @@ private:
   std::map<std::string, std::string> m_pendingDesktopOverrides;
   // Connected monitor connector names, refreshed by the window before build().
   std::vector<std::string> m_outputNames;
+  // One-shot notice from the last window-detect attempt on the Emerge app widths
+  // block (cancelled pick, or a picked window without a class).
+  std::string m_detectNotice;
   // Page-group keys whose collapsible card is expanded. Owned here so the state
   // survives the window's per-change scene rebuilds; the first group is
   // expanded on the first non-search build.

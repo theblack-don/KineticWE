@@ -533,6 +533,22 @@ int EmergeLayoutEngine::totalLeafCount() const
     return count;
 }
 
+std::optional<qreal> EmergeLayoutEngine::appWidthFraction(const Window *window) const
+{
+    if (!window || m_appWidthRules.isEmpty()) {
+        return std::nullopt;
+    }
+    const QString windowClass = window->resourceClass().trimmed().toLower();
+    if (windowClass.isEmpty()) {
+        return std::nullopt;
+    }
+    const auto it = m_appWidthRules.constFind(windowClass);
+    if (it == m_appWidthRules.constEnd()) {
+        return std::nullopt;
+    }
+    return it.value();
+}
+
 void EmergeLayoutEngine::focusWindow(Window *window)
 {
     if (m_columns.isEmpty() || !window) {
@@ -583,6 +599,14 @@ void EmergeLayoutEngine::addWindow(Window *window)
     tile.leaf = leaf;
     column.tiles.append(tile);
     column.activeTileIdx = 0;
+
+    if (const std::optional<qreal> fraction = appWidthFraction(window)) {
+        column.width.kind = EmergeWidthKind::Proportion;
+        column.width.proportion = *fraction;
+        column.width.userSet = true;
+        column.width.pinned = true;
+        column.width.ruleOwned = true;
+    }
 
     const int insertAt = (m_activeColumnIdx >= 0) ? qMin(m_activeColumnIdx + 1, int(m_columns.size()))
                                                   : 0;
@@ -962,9 +986,10 @@ void EmergeLayoutEngine::rebalanceColumnWidths()
     // Cycling changes a single column's width; nothing else is resized.
     const qreal defined = (n == 1) ? 1.0 : DefaultColumnExtent;
     for (EmergeColumn &col : m_columns) {
-        // A width the user set by hand persists across window add/remove and
-        // focus changes; only never-touched columns pick up the default again.
-        if (col.width.userSet) {
+        // A width the user set by hand (or an app rule pinned) persists across
+        // window add/remove and focus changes; only never-touched columns pick
+        // up the default again.
+        if (col.width.pinned || col.width.userSet) {
             continue;
         }
         col.width = EmergeColumnWidth{};
@@ -976,15 +1001,32 @@ void EmergeLayoutEngine::rebalanceColumnWidths()
 void EmergeLayoutEngine::normalizeWidthsToFill()
 {
     qreal total = 0.0;
+    qreal pinnedTotal = 0.0;
     for (const EmergeColumn &col : m_columns) {
-        total += resolveColumnExtentRel(col);
+        const qreal extent = resolveColumnExtentRel(col);
+        total += extent;
+        if (col.width.pinned) {
+            pinnedTotal += extent;
+        }
     }
     if (total <= 0.0 || total >= 1.0) {
         return;
     }
-    // Scale every column up proportionally so the strip still fills the screen.
-    const qreal scale = 1.0 / total;
+
+    const bool hasPinned = pinnedTotal > 0.0;
+    const qreal remaining = 1.0 - pinnedTotal;
+    const qreal scalable = total - pinnedTotal;
+    if (hasPinned && (remaining <= 0.0 || scalable <= 0.0)) {
+        // Nothing unpinned to stretch, or no room left: keep the intentional gap.
+        return;
+    }
+    // Pinned columns keep their explicit width; the rest are scaled up to fill
+    // the screen. Without pinned columns every column shares the scale.
+    const qreal scale = hasPinned ? remaining / scalable : 1.0 / total;
     for (EmergeColumn &col : m_columns) {
+        if (col.width.pinned) {
+            continue;
+        }
         const qreal scaled = resolveColumnExtentRel(col) * scale;
         // Keep the user-set marker across the rescale, so a column that was
         // widened to fill the screen is not later treated as an untouched
@@ -1413,11 +1455,14 @@ void EmergeLayoutEngine::switchPresetColumnWidth()
     // Change only this column's width, then scroll the view to keep it visible.
     // Neighbours keep their widths and are pushed aside / off-screen.
     const qreal oldViewOffset = viewOffset();
+    const bool wasPinned = m_columns.at(m_activeColumnIdx).width.pinned;
     m_columns[m_activeColumnIdx].width = EmergeColumnWidth{};
     m_columns[m_activeColumnIdx].width.proportion = m_presetColumnWidths.at(idx);
-    // A lone column always fills the viewport, so cycling it is a visual no-op;
-    // flagging it would wrongly keep it full once a second column opens.
-    if (m_columns.size() > 1) {
+    m_columns[m_activeColumnIdx].width.pinned = wasPinned;
+    // A lone unpinned column always fills the viewport, so cycling it is a
+    // visual no-op; flagging it would wrongly keep it full once a second column
+    // opens. A pinned (app-rule) column keeps a real width, so it is flagged.
+    if (wasPinned || m_columns.size() > 1) {
         m_columns[m_activeColumnIdx].width.userSet = true;
     }
     m_viewAnchor = focusAnchorFor(m_activeColumnIdx, m_activeColumnIdx, oldViewOffset);
@@ -1431,9 +1476,11 @@ void EmergeLayoutEngine::adjustColumnRatio(qreal delta)
     }
     const qreal current = resolveColumnExtentRel(m_columns.at(m_activeColumnIdx));
     const qreal oldViewOffset = viewOffset();
+    const bool wasPinned = m_columns.at(m_activeColumnIdx).width.pinned;
     m_columns[m_activeColumnIdx].width = EmergeColumnWidth{};
     m_columns[m_activeColumnIdx].width.proportion = qBound(MinColumnExtent, current + delta, qreal(1.0));
-    if (m_columns.size() > 1) {
+    m_columns[m_activeColumnIdx].width.pinned = wasPinned;
+    if (wasPinned || m_columns.size() > 1) {
         m_columns[m_activeColumnIdx].width.userSet = true;
     }
     m_viewAnchor = focusAnchorFor(m_activeColumnIdx, m_activeColumnIdx, oldViewOffset);
@@ -1457,9 +1504,11 @@ void EmergeLayoutEngine::adjustTileSize(Window *window, qreal weightDelta, Qt::O
         // keep it visible; neighbouring columns are not resized.
         const qreal current = resolveColumnExtentRel(m_columns.at(c));
         const qreal oldViewOffset = viewOffset();
+        const bool wasPinned = m_columns.at(c).width.pinned;
         m_columns[c].width = EmergeColumnWidth{};
         m_columns[c].width.proportion = qBound(MinColumnExtent, current + weightDelta, qreal(1.0));
-        if (m_columns.size() > 1) {
+        m_columns[c].width.pinned = wasPinned;
+        if (wasPinned || m_columns.size() > 1) {
             m_columns[c].width.userSet = true;
         }
         m_activeColumnIdx = c;
@@ -1543,11 +1592,26 @@ void EmergeLayoutEngine::interactiveResizeEnded(Window *window, const RectF &bef
         neighbour = leadingDrag ? (c + 1) : (c - 1);
     }
     if (neighbour < 0 || neighbour >= m_columns.size()) {
-        // A lone column simply fills the viewport.
+        // A lone unpinned column simply fills the viewport. A pinned (app-rule)
+        // column can still be dragged, which takes manual ownership of its width.
+        if (!m_columns.at(c).width.pinned) {
+            reflow();
+            return;
+        }
+        const qreal loneOld = resolveColumnExtentRel(m_columns.at(c));
+        const qreal loneViewOffset = viewOffset();
+        m_activeColumnIdx = c;
+        m_columns[c].width = EmergeColumnWidth{};
+        m_columns[c].width.proportion = qBound(MinColumnExtent, loneOld + delta, qreal(1.0));
+        m_columns[c].width.userSet = true;
+        m_columns[c].width.pinned = true;
+        m_viewAnchor = focusAnchorFor(c, c, loneViewOffset);
         reflow();
         return;
     }
 
+    const bool selfPinned = m_columns.at(c).width.pinned;
+    const bool neighbourPinned = m_columns.at(neighbour).width.pinned;
     const qreal selfOld = resolveColumnExtentRel(m_columns.at(c));
     const qreal neighbourOld = resolveColumnExtentRel(m_columns.at(neighbour));
     const qreal selfTarget = qBound(MinColumnExtent, selfOld + delta, qreal(1.0));
@@ -1562,9 +1626,11 @@ void EmergeLayoutEngine::interactiveResizeEnded(Window *window, const RectF &bef
     m_columns[c].width = EmergeColumnWidth{};
     m_columns[c].width.proportion = selfOld + actual;
     m_columns[c].width.userSet = true;
+    m_columns[c].width.pinned = selfPinned;
     m_columns[neighbour].width = EmergeColumnWidth{};
     m_columns[neighbour].width.proportion = neighbourTarget;
     m_columns[neighbour].width.userSet = true;
+    m_columns[neighbour].width.pinned = neighbourPinned;
     m_viewAnchor = focusAnchorFor(c, c, oldViewOffset);
     reflow();
 }
@@ -1722,6 +1788,64 @@ void EmergeLayoutEngine::setEmergePresetWindowHeights(const QList<qreal> &preset
         return;
     }
     m_presetWindowHeights = presets;
+    reflow();
+}
+
+void EmergeLayoutEngine::setEmergeWindowWidthRules(const QHash<QString, qreal> &rules)
+{
+    m_appWidthRules = rules;
+
+    bool changed = false;
+    for (EmergeColumn &col : m_columns) {
+        CustomTile *leaf = col.tiles.isEmpty() ? nullptr : col.tiles.first().leaf;
+        const QList<Window *> windows = leaf ? leaf->windows() : QList<Window *>();
+        const std::optional<qreal> fraction = windows.isEmpty() ? std::nullopt : appWidthFraction(windows.first());
+
+        if (col.width.ruleOwned) {
+            if (!fraction) {
+                col.width = EmergeColumnWidth{};
+                col.width.proportion = (m_columns.size() == 1) ? 1.0 : DefaultColumnExtent;
+                changed = true;
+            } else if (col.width.kind != EmergeWidthKind::Proportion
+                       || !qFuzzyCompare(col.width.proportion, *fraction)) {
+                col.width.kind = EmergeWidthKind::Proportion;
+                col.width.proportion = *fraction;
+                changed = true;
+            }
+        } else if (!col.width.userSet && fraction) {
+            col.width.kind = EmergeWidthKind::Proportion;
+            col.width.proportion = *fraction;
+            col.width.userSet = true;
+            col.width.pinned = true;
+            col.width.ruleOwned = true;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        reflow();
+    }
+}
+
+void EmergeLayoutEngine::refreshWindowWidthRule(Window *window)
+{
+    const int c = columnOfWindow(window);
+    if (c < 0) {
+        return;
+    }
+    EmergeColumn &col = m_columns[c];
+    if (col.tiles.size() != 1 || col.width.userSet || col.width.pinned) {
+        return;
+    }
+    const std::optional<qreal> fraction = appWidthFraction(window);
+    if (!fraction) {
+        return;
+    }
+    col.width.kind = EmergeWidthKind::Proportion;
+    col.width.proportion = *fraction;
+    col.width.userSet = true;
+    col.width.pinned = true;
+    col.width.ruleOwned = true;
     reflow();
 }
 

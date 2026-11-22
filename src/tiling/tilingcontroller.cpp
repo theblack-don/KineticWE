@@ -92,6 +92,31 @@ QList<qreal> parseProportionList(const QStringList &entries)
     return result.isEmpty() ? kDefaultEmergePresets : result;
 }
 
+// "windowClass=fraction" entries for per-app Emerge column widths. The class is
+// matched exactly against Window::resourceClass() (case-insensitively); a value
+// out of (0,1] or an empty class is dropped and the last duplicate wins.
+QHash<QString, qreal> parseEmergeAppWidths(const QStringList &entries)
+{
+    QHash<QString, qreal> result;
+    for (const QString &entry : entries) {
+        // Last '=' so a class name containing '=' still parses.
+        const int separator = entry.lastIndexOf(QLatin1Char('='));
+        if (separator < 0) {
+            continue;
+        }
+        const QString windowClass = entry.left(separator).trimmed().toLower();
+        if (windowClass.isEmpty()) {
+            continue;
+        }
+        bool ok = false;
+        const qreal value = entry.mid(separator + 1).trimmed().toDouble(&ok);
+        if (ok && value > 0.0 && value <= 1.0) {
+            result.insert(windowClass, value);
+        }
+    }
+    return result;
+}
+
 // An enum setting can be stored as the kcfg choice NAME (Kinetic Settings
 // writes strings) or as the integer index (a KDE KCM writes ints). Accept both
 // and fall back to @p fallback for anything unrecognised.
@@ -384,6 +409,7 @@ void TilingController::reconfigure()
         QStringList{QStringLiteral("0.333"), QStringLiteral("0.5"), QStringLiteral("0.667"), QStringLiteral("0.75"), QStringLiteral("1")}));
     m_emergePeek = tilingGroup.readEntry("EmergePeek", false);
     m_emergePeekHeight = std::clamp(tilingGroup.readEntry("EmergePeekHeight", 48), 0, 1000);
+    m_emergeAppWidths = parseEmergeAppWidths(tilingGroup.readEntry("EmergeAppWidths", QStringList()));
     applyEmergeSettingsToEngines();
 
     const QString borderModeString = tilingGroup.readEntry("TilingBorderMode", QStringLiteral("None"));
@@ -589,6 +615,7 @@ void TilingController::configureEmergeEngine(EmergeLayoutEngine *engine)
     engine->setEmergeAxis(m_emergeAxis);
     engine->setEmergePeek(m_emergePeek);
     engine->setEmergePeekHeightPx(m_emergePeekHeight);
+    engine->setEmergeWindowWidthRules(m_emergeAppWidths);
 }
 
 LayoutEngine::LayoutKind TilingController::globalDefaultLayoutKind() const
@@ -1611,6 +1638,12 @@ void TilingController::onWindowClassChanged(Window *window)
         }
         updateBorders();
         return;
+    }
+
+    // The class may only arrive now, after the column was laid out; apply a
+    // per-app Emerge width while the column width is still untouched.
+    if (auto *engine = qobject_cast<EmergeLayoutEngine *>(layoutEngineForWindow(window))) {
+        engine->refreshWindowWidthRule(window);
     }
 
     // Now that the class has arrived, re-run the ignore rules. If the

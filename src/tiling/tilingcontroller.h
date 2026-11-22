@@ -368,6 +368,8 @@ private:
     int m_emergeAxis = 0; // 0 auto, 1 horizontal, 2 vertical
     QList<qreal> m_emergePresetColumnWidths;
     QList<qreal> m_emergePresetWindowHeights;
+    // Per-app Emerge column widths, keyed by lowercased window class.
+    QHash<QString, qreal> m_emergeAppWidths;
     bool m_emergePeek = false;
     int m_emergePeekHeight = 48;
     QStringList m_enabledLayouts;

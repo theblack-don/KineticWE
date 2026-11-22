@@ -10,8 +10,11 @@
 #include "layoutengine.h"
 #include "tile.h"
 
+#include <QHash>
 #include <QList>
 #include <QPointer>
+
+#include <optional>
 
 namespace KWin
 {
@@ -71,6 +74,12 @@ struct EmergeColumnWidth
     /// and focus changes; only never-touched ("default") columns are
     /// re-defaulted when the column count changes.
     bool userSet = false;
+    /// Explicit width that normalisation must not rescale (app rules and
+    /// manual widths).
+    bool pinned = false;
+    /// True while an app width rule still owns this width. Any manual width
+    /// change clears it, so later config edits no longer live-apply.
+    bool ruleOwned = false;
 };
 
 struct EmergeWindowHeight
@@ -177,6 +186,13 @@ public:
     /// No-op for an out-of-range index.
     void focusColumn(int index);
 
+    /// Per-app column widths, keyed by lowercased window class. Pushed from
+    /// TilingController; also live-applies to columns the rule still owns.
+    void setEmergeWindowWidthRules(const QHash<QString, qreal> &rules);
+    /// Re-check the width rule for a window whose class arrived after tiling.
+    /// No-op unless the window still sits alone in a never-touched column.
+    void refreshWindowWidthRule(Window *window);
+
     bool supportsPerTileResize() const override
     {
         return true;
@@ -241,9 +257,12 @@ private:
     int columnOfWindow(Window *window) const;
     int tileIndexOfWindow(Window *window) const;
     int totalLeafCount() const;
+    /// Rule fraction for the window's class, when one is configured.
+    std::optional<qreal> appWidthFraction(const Window *window) const;
     void rebalanceColumnWidths();
-    /// Scale every column up proportionally when the strip's total width would
-    /// fall below one viewport, so the screen is never left partly empty.
+    /// Scale the unpinned columns up when the strip's total width would fall
+    /// below one viewport, so the screen is never left partly empty. Pinned
+    /// columns keep their explicit width.
     void normalizeWidthsToFill();
 
     QPointer<RootTile> m_root;
@@ -260,6 +279,7 @@ private:
     // Config (pushed from kwinrc via TilingController).
     QList<qreal> m_presetColumnWidths{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
     QList<qreal> m_presetWindowHeights{1.0 / 3.0, 0.5, 2.0 / 3.0, 0.75, 1.0};
+    QHash<QString, qreal> m_appWidthRules;
     int m_axisSetting = 0; // 0 auto, 1 horizontal, 2 vertical
     bool m_peekEnabled = false;
     int m_peekHeightPx = 48;

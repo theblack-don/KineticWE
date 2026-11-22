@@ -389,6 +389,7 @@ into the engine). Proposed keys (names are a suggestion — keep them `Emerge*`)
 |---|---|---|---|
 | `EmergePresetColumnWidths` | `StringList` | `1/3,1/2,2/3,3/4,1` (or decimals) | preset width vocabulary |
 | `EmergePresetWindowHeights` | `StringList` | same | preset height vocabulary |
+| `EmergeAppWidths` | `StringList` | empty | per-app column width, `windowClass=fraction` (e.g. `firefox=0.333`); exact, case-insensitive class match |
 | `EmergeTabbed` | `bool` | `false` | default display mode |
 | `EmergeFillGaps` / `EmergeGap` | `int` | existing tiling gap | inner gap |
 
@@ -589,6 +590,7 @@ Config keys (global; `[Tiling]` group of `kineticwe.kwe`):
 | `EmergePresetWindowHeights` | StringList | 0.333,0.5,0.667,0.75,1 |
 | `EmergePeek` | Bool | false |
 | `EmergePeekHeight` | int (px of the bottom band) | 48 |
+| `EmergeAppWidths` | StringList (`windowClass=fraction`) | empty |
 
 Deferred (Phase C+, needs your go-ahead):
 
@@ -601,6 +603,34 @@ Deferred (Phase C+, needs your go-ahead):
   today; straddlers are clamped by the compositor's own clipping.
 
 ## 12. Revision history
+
+**Revision 21 (this session):**
+- **Per-app predefined column widths.** New `[Tiling]` `EmergeAppWidths`
+  StringList of `windowClass=fraction` entries (e.g. `firefox=0.333`), edited
+  on the Kinetic Settings Tiling page with the existing interactive window
+  detect. A matched window opens its column at the configured fraction of the
+  work area (0.333 / 0.5 / 0.667 / 1 on the page; hand-edited values keep a
+  custom option). Matching is exact and case-insensitive against
+  `Window::resourceClass()`; `=` in a class name is tolerated because the entry
+  splits on the last `=`, and the last duplicate wins.
+- **The width survives normalization.** `EmergeColumnWidth` gained `pinned`
+  (explicit width normalisation must not rescale) and `ruleOwned` (the width is
+  still the app rule's, which is what lets config edits live-apply).
+  `normalizeWidthsToFill()` leaves pinned columns alone and scales only the
+  unpinned remainder; when every column is pinned (or no space is left) the gap
+  stays, intentionally.
+- **Live reapply, never over a manual resize.** Pushing the rules again
+  (`setEmergeWindowWidthRules()`) updates columns that still report
+  `ruleOwned`, resets columns whose rule was removed, and adopts rules for
+  already-open windows that never had a manual width. Preset cycling, ratio
+  keys, resize keys and edge drags all clear `ruleOwned` (while preserving
+  `pinned`), after which config edits leave that column alone.
+- **Late WM_CLASS.** `TilingController::onWindowClassChanged()` now refreshes
+  an Emerge column's rule before the ignore early-out, so a window that
+  arrived classless still gets its configured width.
+- **Lone pinned columns can be dragged.** A lone ordinary column still fills
+  the viewport and its edge drag remains a no-op, but a lone app-rule column
+  accepts the drag delta (`MinColumnExtent..1.0`) and takes manual ownership.
 
 **Revision 20 (this session):**
 - **Peeked windows no longer steal focus on hover.** `Tile` gained a
@@ -666,7 +696,9 @@ Deferred (Phase C+, needs your go-ahead):
   columns that were never touched, and `normalizeWidthsToFill()` preserves the
   flag across its rescale. A lone column is never flagged, since it always fills
   the viewport (cycling it is a visual no-op); this keeps the first-column-full /
-  subsequent-`0.5` default when the second window opens. This restores the
+  subsequent-`0.5` default when the second window opens. (Exception, Revision 21:
+  a lone column pinned by an app width rule keeps its explicit width and is
+  flagged.) This restores the
   documented invariant ("inserting or removing a column NEVER resizes another
   column"), which `rebalanceColumnWidths()` had been violating.
 
