@@ -1,7 +1,7 @@
 #pragma once
 
 #include "compositors/workspace_backend.h"
-#include "wayland/wayland_toplevels.h"
+#include "shell/wayland/wayland_toplevels.h"
 
 #include <functional>
 #include <memory>
@@ -35,23 +35,23 @@ namespace compositors::kde {
     void stop();
     void setChangeCallback(ChangeCallback callback);
 
-    [[nodiscard]] std::optional<ActiveToplevel> current() const;
+    std::optional<ActiveToplevel> current() const;
     // An empty outputName matches windows on every output.
-    [[nodiscard]] std::vector<std::string> runningAppIds(std::string_view outputName = {}) const;
-    [[nodiscard]] std::vector<ToplevelInfo>
+    std::vector<std::string> runningAppIds(std::string_view outputName = {}) const;
+    std::vector<ToplevelInfo>
     windowsForApp(const std::string& idLower, const std::string& wmClassLower, std::string_view outputName = {}) const;
-    [[nodiscard]] bool hasTrackedWindows() const noexcept { return !m_trackedWindows.empty(); }
-    [[nodiscard]] std::vector<WorkspaceWindow> trackedWorkspaceWindows() const;
-    [[nodiscard]] std::optional<std::string> focusedOutputName() const;
+    bool hasTrackedWindows() const noexcept { return !m_trackedWindows.empty(); }
+    std::vector<WorkspaceWindow> trackedWorkspaceWindows() const;
+    std::optional<std::string> focusedOutputName() const;
     void activateWindow(
         const std::string& title, const std::string& appId, const std::string& uuid = {}, bool warpPointer = false
     );
     void closeWindow(const std::string& title, const std::string& appId, const std::string& uuid = {});
-    [[nodiscard]] std::optional<WindowMinimizeState> windowMinimizeState(std::string_view uuid) const;
+    std::optional<WindowMinimizeState> windowMinimizeState(std::string_view uuid) const;
     bool minimizeWindow(const std::string& uuid);
     // Fallback for windows the script has not tracked yet (searched by uuid, else resourceClass + caption).
     bool minimizeWindowByCaption(const std::string& title, const std::string& appId, const std::string& uuid = {});
-    [[nodiscard]] bool isAvailable() const noexcept { return m_scriptInstalled; }
+    bool isAvailable() const noexcept { return m_scriptInstalled; }
 
   private:
     struct TrackedWindow {
@@ -63,7 +63,7 @@ namespace compositors::kde {
       std::optional<WindowMinimizeState> minimizeState;
     };
 
-    [[nodiscard]] bool ensureScriptFile(std::string& scriptPath) const;
+    bool ensureScriptFile(std::string& scriptPath) const;
     [[nodiscard]] bool installScript(const std::string& scriptPath);
     void uninstallScript();
     [[nodiscard]] bool runTransientScript(const std::string& source, std::string_view label);

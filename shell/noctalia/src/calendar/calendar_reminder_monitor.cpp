@@ -26,9 +26,6 @@ namespace {
   // poll() timeouts run on CLOCK_MONOTONIC, which does not advance across suspend. Without a ceiling
   // a long sleep would resume that much wall-clock time late, so cap how long we stay parked.
   constexpr int kMaxSleepMs = 5 * 60 * 1000;
-  // Outstanding clickable reminders tracked at once. Reminders are infrequent, so this only guards
-  // against unbounded growth when they are never clicked.
-  constexpr std::size_t kMaxTrackedActionUrls = 32;
   // A reminder must survive the user stepping away from the desk, so it never auto-expires:
   // NotificationManager treats a zero timeout as "no expiry". A notification filter with
   // allow_permanent = false can still downgrade it.
@@ -71,10 +68,6 @@ void CalendarReminderMonitor::initialize() {
     return;
   }
   loadPersistedState();
-  m_notifications.setInternalActionCallback([this](
-                                                std::uint32_t id, const std::string& actionKey,
-                                                const std::string& activationToken, const std::string& /*sender*/
-                                            ) { onNotificationAction(id, actionKey, activationToken); });
   m_initialized = true;
 }
 
@@ -119,8 +112,8 @@ void CalendarReminderMonitor::persistState() {
     }
     encoded += *key;
   }
-  (void)m_configService.setStateString(kStateOwner, kFiredKey, encoded);
-  (void)m_configService.setStateString(kStateOwner, kDigestDateKey, m_lastDigestDate.value_or(std::string{}));
+  m_configService.setStateString(kStateOwner, kFiredKey, encoded);
+  m_configService.setStateString(kStateOwner, kDigestDateKey, m_lastDigestDate.value_or(std::string{}));
 }
 
 void CalendarReminderMonitor::schedulePersist() {
@@ -238,20 +231,22 @@ void CalendarReminderMonitor::fireReminder(
 
   // Events with a resolved meeting link become clickable: the toast maps a left click on its body to
   // the freedesktop "default" action.
-  const bool clickable = !event.url.empty();
-  if (clickable) {
+  if (!event.url.empty()) {
     request.actions = {"default", i18n::tr("notifications.internal.calendar-reminder-open")};
+    request.actionHandler = [url = event.url](const std::string& actionKey, const std::string& activationToken) {
+      if (actionKey != "default") {
+        return;
+      }
+      // resolveEventLink already restricted this to http(s), so it is safe to hand to xdg-open.
+      if (!net::openInBrowser(url, activationToken)) {
+        kLog.warn("failed to open meeting link from a calendar reminder");
+      }
+    };
   }
 
   const std::uint32_t id = m_notifications.addOrReplace(std::move(request));
   if (id == 0) {
     return;
-  }
-  if (clickable) {
-    m_actionUrls.emplace_back(id, event.url);
-    while (m_actionUrls.size() > kMaxTrackedActionUrls) {
-      m_actionUrls.pop_front();
-    }
   }
   if (calendar::countdownNextChange(event.start, now).has_value()) {
     if (m_countdowns.size() >= kMaxLiveCountdowns) {
@@ -284,24 +279,6 @@ CalendarReminderMonitor::refreshCountdowns(std::chrono::system_clock::time_point
   return wake;
 }
 
-void CalendarReminderMonitor::onNotificationAction(
-    std::uint32_t id, const std::string& actionKey, const std::string& activationToken
-) {
-  if (actionKey != "default") {
-    return;
-  }
-  const auto it = std::ranges::find(m_actionUrls, id, &std::pair<std::uint32_t, std::string>::first);
-  if (it == m_actionUrls.end()) {
-    return;
-  }
-  const std::string url = it->second;
-  m_actionUrls.erase(it);
-  // resolveEventLink already restricted this to http(s), so it is safe to hand to xdg-open.
-  if (!net::openInBrowser(url, activationToken)) {
-    kLog.warn("failed to open meeting link for notification #{}", id);
-  }
-}
-
 void CalendarReminderMonitor::fireCatchUpSummary(std::size_t remaining) {
   NotificationRequest request;
   request.appName = i18n::tr("notifications.internal.calendar");
@@ -313,7 +290,7 @@ void CalendarReminderMonitor::fireCatchUpSummary(std::size_t remaining) {
   request.dndPolicy = NotificationDndPolicy::Respect;
   request.persistInHistory = true;
   request.icon = std::string("noctalia-glyph:calendar-clock");
-  (void)m_notifications.addOrReplace(std::move(request));
+  m_notifications.addOrReplace(std::move(request));
 }
 
 void CalendarReminderMonitor::fireDigest(std::span<const CalendarEvent* const> events) {
@@ -340,5 +317,5 @@ void CalendarReminderMonitor::fireDigest(std::span<const CalendarEvent* const> e
   request.dndPolicy = NotificationDndPolicy::Respect;
   request.persistInHistory = true;
   request.icon = std::string("noctalia-glyph:calendar-event");
-  (void)m_notifications.addOrReplace(std::move(request));
+  m_notifications.addOrReplace(std::move(request));
 }

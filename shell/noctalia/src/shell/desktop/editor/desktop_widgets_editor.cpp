@@ -2,7 +2,6 @@
 
 #include "config/config_service.h"
 #include "core/deferred_call.h"
-#include "core/files/directory_scanner.h"
 #include "core/input/key_modifiers.h"
 #include "core/input/key_symbols.h"
 #include "core/input/keybind_matcher.h"
@@ -12,24 +11,26 @@
 #include "render/backend/render_backend.h"
 #include "render/core/color.h"
 #include "render/core/shared_texture_cache.h"
-#include "render/core/wallpaper_types.h"
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
-#include "render/scene/wallpaper_node.h"
 #include "shell/desktop/desktop_widget_layout.h"
 #include "shell/desktop/desktop_widget_settings_registry.h"
 #include "shell/desktop/widgets/desktop_login_box_widget.h"
+#include "shell/dialogs/file_dialog.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
+#include "shell/render/wallpaper_node.h"
+#include "shell/render/wallpaper_types.h"
 #include "shell/tooltip/tooltip_manager.h"
 #include "shell/wallpaper/wallpaper_geometry.h"
+#include "shell/wayland/layer_shell.h"
+#include "shell/wayland/layer_surface.h"
+#include "system/directory_scanner.h"
 #include "time/time_format.h"
 #include "ui/builders.h"
 #include "ui/controls/select_dropdown_popup.h"
-#include "ui/dialogs/file_dialog.h"
 #include "ui/palette.h"
 #include "ui/style.h"
-#include "wayland/layer_surface.h"
 #include "wayland/wayland_connection.h"
 #include "wayland/wayland_seat.h"
 
@@ -453,7 +454,7 @@ DesktopWidgetsEditor::overlayPopupParentContext(const OverlaySurface& surface) c
 
   return LayerPopupParentContext{
       .surface = surface.surface->wlSurface(),
-      .layerSurface = layerSurface,
+      .attach = LayerShell::popupAttach(layerSurface),
       .output = surface.output,
       .width = width,
       .height = height,
@@ -661,7 +662,9 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
     if (m_config != nullptr) {
       surface.selectPopup->setShadowConfig(m_config->config().shell.shadow);
     }
-    surface.selectPopup->setParent(surface.surface->layerSurface(), surface.surface->wlSurface(), surface.output);
+    surface.selectPopup->setParent(
+        LayerShell::popupAttach(surface.surface->layerSurface()), surface.surface->wlSurface(), surface.output
+    );
     root->setPopupContext(surface.selectPopup.get());
   }
   root->setFrameSize(static_cast<float>(surface.surface->width()), static_cast<float>(surface.surface->height()));
@@ -915,7 +918,8 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
 
     auto border = ui::box({
         .fill = clearColorSpec(),
-        .radius = Style::scaledRadiusMd(),
+        .styleRadius = Style::radiusMd,
+        .styleRadiusScale = 1.0F,
         .configure = [](Box& box) { box.setBorder(colorSpecFromRole(ColorRole::Primary), kSelectionStroke); },
     });
     border->setZIndex(1);
@@ -991,7 +995,8 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
 
     auto selectionBorder = ui::box({
         .fill = clearColorSpec(),
-        .radius = Style::scaledRadiusMd(),
+        .styleRadius = Style::radiusMd,
+        .styleRadiusScale = 1.0F,
         .configure = [](Box& box) { box.setBorder(colorSpecFromRole(ColorRole::Primary), kSelectionStroke); },
     });
     selectionBorder->setZIndex(1);
@@ -1013,7 +1018,8 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
 
       auto scaleHandle = ui::box({
           .fill = colorSpecFromRole(ColorRole::Primary),
-          .radius = Style::scaledRadiusSm(),
+          .styleRadius = Style::radiusSm,
+          .styleRadiusScale = 1.0F,
       });
       scaleHandle->setZIndex(104);
       surface.scaleHandles[i] = scaleHandle.get();
@@ -1119,7 +1125,7 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
                             flex.setPadding(Style::spaceSm, Style::spaceMd);
                             flex.setFill(colorSpecFromRole(ColorRole::Surface, 0.94F));
                             flex.setBorder(colorSpecFromRole(ColorRole::OutlineVariant), Style::borderWidth);
-                            flex.setRadius(Style::scaledRadiusXl());
+                            flex.setStyleRadius(Style::radiusXl);
                             flex.setZIndex(200);
                           },
                   },
@@ -1131,7 +1137,8 @@ void DesktopWidgetsEditor::rebuildScene(OverlaySurface& surface) {
                           .paddingV = Style::spaceXs,
                           .paddingH = Style::spaceSm,
                           .fill = colorSpecFromRole(ColorRole::SurfaceContainer, 0.85F),
-                          .radius = Style::scaledRadiusLg(),
+                          .styleRadius = Style::radiusLg,
+                          .styleRadiusScale = 1.0F,
                           .minHeight = Style::controlHeightSm,
                       },
                       ui::glyph({

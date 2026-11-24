@@ -1,6 +1,6 @@
 #include "ipc/ipc_client.h"
 
-#include "util/file_utils.h"
+#include "core/application_identity.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -27,7 +27,7 @@ namespace {
     if (display == nullptr || display[0] == '\0') {
       display = "wayland-0";
     }
-    return std::string(runtime) + "/" + std::string(FileUtils::kAppDirName) + "-" + display + ".sock";
+    return std::string(runtime) + "/" + std::string(applicationIdentity().name) + "-" + display + ".sock";
   }
 
 } // namespace

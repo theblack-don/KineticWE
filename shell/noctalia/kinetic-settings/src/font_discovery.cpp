@@ -1,8 +1,8 @@
 #include "font_discovery.h"
 
 #include "core/log.h"
-#include "core/process/process.h"
 #include "shell/settings/font_family_catalog.h"
+#include "system/process.h"
 #include "theme_discovery.h"
 
 #include <cstdlib>

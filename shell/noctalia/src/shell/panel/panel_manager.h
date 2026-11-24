@@ -3,11 +3,11 @@
 #include "core/timer_manager.h"
 #include "render/animation/animation_manager.h"
 #include "render/scene/input_dispatcher.h"
+#include "shell/dialogs/layer_popup_host.h"
 #include "shell/panel/attached_panel_context.h"
 #include "shell/panel/panel_click_shield.h"
 #include "shell/panel/persistent_panel_host.h"
-#include "ui/dialogs/layer_popup_host.h"
-#include "wayland/hyprland/popup_grab_host.h"
+#include "wayland/popup_grab_host.h"
 
 #include <cstdint>
 #include <functional>
@@ -91,47 +91,52 @@ public:
   void setPanelOpenedCallback(std::function<void()> callback);
   void setAttachedPanelAvailabilityCallback(std::function<bool(wl_output*, std::string_view)> callback);
   void setBarConfigProvider(std::function<std::optional<BarConfig>(wl_output*, std::string_view)> provider);
+  void setAttachedPanelStateCallback(std::function<void(wl_output*, std::string_view, bool)> callback);
   void setAttachedPanelBarSettledCallback(std::function<bool(wl_output*, std::string_view)> callback);
   // Called when an auto-hide bar finishes revealing for an attached panel open.
   void onAttachedBarRevealSettled(wl_output* output, std::string_view barName);
+  // Keeps an open attached panel in sync with a runtime bar-layer-set change.
+  void onAttachedBarLayerChanged(wl_output* output, std::string_view barName, std::string_view layerPolicy);
 
   void registerPanel(const std::string& id, std::unique_ptr<Panel> content);
   // Drops a previously registered panel, closing it first if it is open. Used to
   // retire plugin-backed panels on a plugin enable/disable/reload.
   void unregisterPanel(const std::string& id);
   // Every currently registered panel id (regular and persistent), unsorted.
-  [[nodiscard]] std::vector<std::string> availablePanelIds() const;
+  std::vector<std::string> availablePanelIds() const;
 
   void openPanel(const std::string& panelId, PanelOpenRequest request = {});
   void closePanel(bool animateClose = true);
   // Call outside input dispatch to clear the displayed buffer before closing and running the action.
   void closePanelForCapture(std::function<void()> afterClose);
   void togglePanel(const std::string& panelId, PanelOpenRequest request);
+  // Opens the panel on the request's context, like togglePanel, but never closes
+  // it: an open panel just switches context. For prompts that must reach the user.
+  void showPanel(const std::string& panelId, PanelOpenRequest request);
   // IPC-friendly overload: asks CompositorPlatform for preferred interactive output.
   void togglePanel(const std::string& panelId);
 
   bool onPointerEvent(const PointerEvent& event);
-  void onKeyboardEvent(const KeyboardEvent& event);
+  bool onKeyboardEvent(const KeyboardEvent& event);
 
-  [[nodiscard]] bool isOpen() const noexcept;
-  [[nodiscard]] bool isOpenPanel(std::string_view panelId) const noexcept;
-  [[nodiscard]] bool isPanelTransitionActive() const noexcept;
-  [[nodiscard]] bool isAttachedOpen() const noexcept;
+  bool isOpen() const noexcept;
+  bool isOpenPanel(std::string_view panelId) const noexcept;
+  bool isPanelTransitionActive() const noexcept;
+  bool isAttachedOpen() const noexcept;
   // Output the active panel is on; null when none is open.
-  [[nodiscard]] wl_output* attachedPanelOutput() const noexcept;
+  wl_output* attachedPanelOutput() const noexcept;
   // Bar that opened the active panel; empty when none was recorded.
-  [[nodiscard]] std::string_view attachedSourceBarName() const noexcept;
-  [[nodiscard]] const std::string& activePanelId() const noexcept;
-  [[nodiscard]] Panel* activePanel() const noexcept { return m_activePanel; }
+  std::string_view attachedSourceBarName() const noexcept;
+  const std::string& activePanelId() const noexcept;
+  Panel* activePanel() const noexcept { return m_activePanel; }
   // True when a panel is open and it reports the given context as active (e.g. control-center tab).
-  [[nodiscard]] bool isActivePanelContext(std::string_view context) const noexcept;
-  [[nodiscard]] std::optional<LayerPopupParentContext> popupParentContextForSurface(wl_surface* surface) const noexcept;
-  [[nodiscard]] std::optional<LayerPopupParentContext> fallbackPopupParentContext() const noexcept;
-  [[nodiscard]] std::optional<LayerPopupParentContext>
-  popupParentContextForPanel(std::string_view panelId) const noexcept;
+  bool isActivePanelContext(std::string_view context) const noexcept;
+  std::optional<LayerPopupParentContext> popupParentContextForSurface(wl_surface* surface) const noexcept;
+  std::optional<LayerPopupParentContext> fallbackPopupParentContext() const noexcept;
+  std::optional<LayerPopupParentContext> popupParentContextForPanel(std::string_view panelId) const noexcept;
 
-  [[nodiscard]] RenderContext* renderContext() const noexcept { return m_renderContext; }
-  [[nodiscard]] WaylandConnection* wayland() const noexcept;
+  RenderContext* renderContext() const noexcept { return m_renderContext; }
+  WaylandConnection* wayland() const noexcept;
 
   // Applies the shell's effective popup shadow settings to a panel-owned
   // context menu before it opens.
@@ -156,8 +161,8 @@ public:
   void onConfigReloaded();
   void onIconThemeChanged();
   void focusArea(InputArea* area);
-  [[nodiscard]] InputDispatcher& inputDispatcher() noexcept { return m_inputDispatcher; }
-  [[nodiscard]] const InputDispatcher& inputDispatcher() const noexcept { return m_inputDispatcher; }
+  InputDispatcher& inputDispatcher() noexcept { return m_inputDispatcher; }
+  const InputDispatcher& inputDispatcher() const noexcept { return m_inputDispatcher; }
   void requestUpdateOnly();
   void requestLayout();
   // Requests a redraw on the active panel surface without re-running panel
@@ -193,7 +198,7 @@ private:
   void activateFocusGrab();
   void applyKeyboardRelaxation(LayerShellKeyboard mode);
   void addFocusGrabWhitelistSurfaces(FocusGrab& grab, wl_surface* excludedSurface);
-  [[nodiscard]] bool isFocusGrabWhitelistSurface(wl_surface* surface) const;
+  bool isFocusGrabWhitelistSurface(wl_surface* surface) const;
   void deactivateOutsideClickHandlers();
   void applyAttachedReveal(float progress);
   void applyDetachedReveal(float progress);
@@ -203,6 +208,7 @@ private:
   // using the cached attached background opacity and bar position. Geometry/positions are not touched.
   // Safe to call any time after buildScene has run.
   void applyAttachedDecorationStyle();
+  [[nodiscard]] float activeDetachedBackgroundOpacity() const noexcept;
   // Submit a wl_region matching the panel body after applying the current reveal clip.
   void applyPanelCompositorBlur(int bodyX, int bodyY, int bodyW, int bodyH, int clipX, int clipY, int clipW, int clipH);
   // Positions the background, shadows, and content node around the current card and sets
@@ -233,6 +239,7 @@ private:
   std::function<void()> m_panelOpenedCallback;
   std::function<bool(wl_output*, std::string_view)> m_attachedPanelAvailabilityCallback;
   std::function<std::optional<BarConfig>(wl_output*, std::string_view)> m_barConfigProvider;
+  std::function<void(wl_output*, std::string_view, bool)> m_attachedPanelStateCallback;
   std::function<bool(wl_output*, std::string_view)> m_attachedPanelBarSettledCallback;
   PanelClickShield m_clickShield;
   PersistentPanelHost m_persistentHost;
@@ -297,6 +304,7 @@ private:
   std::int32_t m_detachedBleedRight = 0;
   std::int32_t m_detachedBleedBottom = 0;
   float m_attachedBackgroundOpacity = 1.0F;
+  float m_detachedBackgroundOpacity = 1.0F;
   bool m_attachedContactShadow = false;
   float m_attachedRevealProgress = 1.0F;
   float m_detachedRevealProgress = 1.0F;

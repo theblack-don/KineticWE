@@ -1,7 +1,7 @@
 #include "app/single_instance_lock.h"
 
+#include "core/application_identity.h"
 #include "core/log.h"
-#include "util/file_utils.h"
 
 #include <cerrno>
 #include <cstdlib>
@@ -63,5 +63,5 @@ std::string SingleInstanceLock::resolveLockPath() {
   if (display == nullptr || display[0] == '\0') {
     display = "wayland-0";
   }
-  return std::string(runtime) + "/" + std::string(FileUtils::kAppDirName) + "-" + display + ".lock";
+  return std::string(runtime) + "/" + std::string(applicationIdentity().name) + "-" + display + ".lock";
 }

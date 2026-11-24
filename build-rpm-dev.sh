@@ -495,6 +495,10 @@ binary_build() {
         error "Binary build did not produce $TEST_PREFIX/bin/noctalia-kwe"
         exit 1
     fi
+    if [[ "$build_shell" == true ]] && [[ ! -x "$TEST_PREFIX/libexec/kineticwe/kineticwe-pam-helper" ]]; then
+        error "Binary build did not produce $TEST_PREFIX/libexec/kineticwe/kineticwe-pam-helper"
+        exit 1
+    fi
     info "Binary build installed to $TEST_PREFIX"
 }
 
@@ -555,6 +559,10 @@ noctalia_only_build() {
 
     if [[ ! -x "$TEST_PREFIX/bin/noctalia-kwe" ]]; then
         error "Noctalia-only build did not produce $TEST_PREFIX/bin/noctalia-kwe"
+        exit 1
+    fi
+    if [[ ! -x "$TEST_PREFIX/libexec/kineticwe/kineticwe-pam-helper" ]]; then
+        error "Noctalia-only build did not produce $TEST_PREFIX/libexec/kineticwe/kineticwe-pam-helper"
         exit 1
     fi
     info "Noctalia-only build installed to $TEST_PREFIX"
@@ -1134,6 +1142,7 @@ reset_local() {
         "$TEST_PREFIX/lib/qt6/qml/org/kde/xdgdesktopportal"
         # kineticwe-noctalia (Noctalia fork shell, noctalia-kwe)
         "$TEST_PREFIX/bin/noctalia-kwe"
+        "$TEST_PREFIX/libexec/kineticwe"*
         "$TEST_PREFIX/share/noctalia-kwe"
         "$TEST_PREFIX/share/applications/dev.kineticwe.Noctalia.desktop"
         "$TEST_PREFIX/share/applications/dev.kineticwe.Noctalia.Annotator.desktop"

@@ -14,7 +14,7 @@
 #include "ui/controls/glyph.h"
 #include "ui/controls/input.h"
 #include "ui/controls/label.h"
-#include "ui/controls/search_picker.h"
+#include "shell/controls/search_picker.h"
 #include "ui/controls/separator.h"
 #include "ui/palette.h"
 #include "ui/style.h"

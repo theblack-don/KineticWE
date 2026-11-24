@@ -1,6 +1,6 @@
+#include "core/application_identity.h"
 #include "ipc/ipc_service.h"
 #include "tests/test_check.h"
-#include "util/file_utils.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -186,7 +186,7 @@ int main() {
 
   TEST_CHECK(ipc.start());
   const auto socketPath =
-      runtimeDir / (std::string(FileUtils::kAppDirName) + "-" + std::string(kWaylandDisplay) + ".sock");
+      runtimeDir / (applicationIdentity().name + "-" + std::string(kWaylandDisplay) + ".sock");
   TEST_CHECK(sendRaw(ipc, socketPath, "status line1\nline2\nline3") == "status:line1\nline2\nline3\n");
   return 0;
 }

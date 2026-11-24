@@ -12,11 +12,14 @@
 class Button;
 class Flex;
 class Input;
+class ListEditor;
 class Node;
 class Stepper;
 class Toggle;
 
 namespace settings {
+
+  using ListChangedCallback = std::function<void(const std::vector<std::string>&)>;
 
   // Builds the override-backed settings controls (rows, toggles, sliders, selects, color
   // pickers, list editors, ...). Owns a copy of the SettingsContentContext so it can be
@@ -26,8 +29,8 @@ namespace settings {
   public:
     explicit SettingsControlFactory(SettingsContentContext ctx);
 
-    [[nodiscard]] const SettingsContentContext& context() const noexcept { return m_ctx; }
-    [[nodiscard]] float scale() const noexcept { return m_scale; }
+    const SettingsContentContext& context() const noexcept { return m_ctx; }
+    float scale() const noexcept { return m_scale; }
 
     [[nodiscard]] std::unique_ptr<Button> makeResetButton(const std::vector<std::string>& path);
     // Same button, but the confirmed click runs `onConfirmed` instead of clearing `path`.
@@ -60,7 +63,7 @@ namespace settings {
         const std::function<std::vector<std::pair<std::vector<std::string>, ConfigOverrideValue>>(double)>&
             linkedCommit = {},
         std::string valueSuffix = {}, SliderSetting::InvertSlot invertSlot = SliderSetting::InvertSlot::None,
-        bool invertEnabled = true
+        bool invertEnabled = true, const std::function<void(double)>& preview = {}
     );
 
     [[nodiscard]] std::unique_ptr<Flex>
@@ -82,6 +85,8 @@ namespace settings {
     [[nodiscard]] std::unique_ptr<Flex>
     makeOptionalStepper(const OptionalStepperSetting& setting, const std::vector<std::string>& path);
 
+    [[nodiscard]] std::unique_ptr<Flex> makeLength(const LengthSetting& setting, const std::vector<std::string>& path);
+
     [[nodiscard]] std::unique_ptr<Node>
     makeColorSpecPicker(const ColorSpecPickerSetting& setting, const std::vector<std::string>& path);
 
@@ -91,6 +96,11 @@ namespace settings {
     );
 
     void makeListBlock(Flex& section, const SettingEntry& entry, const ListSetting& list);
+    void makeShortcutListBlock(Flex& section, const SettingEntry& entry, const ShortcutListSetting& shortcuts);
+    [[nodiscard]] std::unique_ptr<ListEditor> makeListEditor(
+        std::vector<std::string> items, std::vector<SelectOption> suggestedOptions, std::size_t maxItems,
+        const ListChangedCallback& onChanged, const std::string& title, const std::vector<std::string>& path
+    );
     void makeStringMapBlock(Flex& section, const SettingEntry& entry, const StringMapSetting& map);
 
     [[nodiscard]] std::unique_ptr<Flex> makeOverrideResetActions(const std::vector<std::string>& path);
@@ -103,7 +113,7 @@ namespace settings {
     // Resets several config paths as one setting (e.g. a range slider's low + high paths).
     [[nodiscard]] std::unique_ptr<Button>
     makeGroupedResetButton(std::vector<std::vector<std::string>> paths, std::function<void()> onConfirmed = nullptr);
-    [[nodiscard]] static bool isTemplateEnableTogglePath(const std::vector<std::string>& path);
+    static bool isTemplateEnableTogglePath(const std::vector<std::string>& path);
 
     SettingsContentContext m_ctx;
     float m_scale;

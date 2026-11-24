@@ -1,34 +1,11 @@
 #include "config/config_types.h"
+#include "core/application_identity.h"
 #include "scripting/plugin_source_paths.h"
-#include "util/file_utils.h"
+#include "tests/test_check.h"
 
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
-#include <print>
 #include <string>
-
-namespace {
-
-  bool expect(bool condition, const char* message) {
-    if (!condition) {
-      std::println(stderr, "plugin_source_paths_test: {}", message);
-    }
-    return condition;
-  }
-
-  bool expectPath(const std::filesystem::path& actual, const std::filesystem::path& expected, const char* message) {
-    if (actual != expected) {
-      std::println(
-          stderr, "plugin_source_paths_test: {}\n  actual:   {}\n  expected: {}", message, actual.string(),
-          expected.string()
-      );
-      return false;
-    }
-    return true;
-  }
-
-} // namespace
 
 int main() {
   ::setenv("NOCTALIA_STATE_HOME", "/tmp/noctalia-path-test-state", 1);
@@ -46,56 +23,25 @@ int main() {
   };
 
   const std::filesystem::path stateRoot =
-      std::filesystem::path("/tmp/noctalia-path-test-state") / FileUtils::kAppDirName;
-  bool ok = true;
-  ok = expectPath(
-           scripting::plugin_paths::localSourceRoot(),
-           std::filesystem::path("/tmp/noctalia-path-test-data") / FileUtils::kAppDirName / "plugins",
-           "local source root"
-       )
-      && ok;
-  ok = expectPath(
-           scripting::plugin_paths::sourceStorageRoot(gitSource), stateRoot / "plugins/sources/official",
-           "git source storage root"
-       )
-      && ok;
-  ok = expectPath(
-           scripting::plugin_paths::gitRepoRoot(gitSource), stateRoot / "plugins/sources/official/repo", "git repo root"
-       )
-      && ok;
-  ok = expectPath(
-           scripting::plugin_paths::gitMaterializedRoot(gitSource), stateRoot / "plugins/materialized/official",
-           "git materialized root"
-       )
-      && ok;
-  ok = expectPath(
-           scripting::plugin_paths::registryRoot(gitSource), stateRoot / "plugins/materialized/official",
-           "git registry root"
-       )
-      && ok;
-  ok = expect(isDefaultPluginSourceName("official"), "official source should be protected as a default source") && ok;
-  ok = expect(isDefaultPluginSourceName("community"), "community source should be protected as a default source") && ok;
-  ok = expect(!isDefaultPluginSourceName("dev"), "custom source should not be protected as a default source") && ok;
-  ok = expect(
-           scripting::plugin_paths::registryRoot(pathSource).string().ends_with("/dev/noctalia-plugins"),
-           "path source registry root expands user path"
-       )
-      && ok;
-  ok = expect(
-           scripting::plugin_paths::pathIsInside("/tmp/noctalia/a/b", "/tmp/noctalia"),
-           "child path should be inside parent"
-       )
-      && ok;
-  ok = expect(
-           !scripting::plugin_paths::pathIsInside("/tmp/noctalia", "/tmp/noctalia"),
-           "parent path must not count as inside itself"
-       )
-      && ok;
-  ok = expect(
-           !scripting::plugin_paths::pathIsInside("/tmp/noctalia-other/a", "/tmp/noctalia"),
-           "sibling prefix must not count as inside parent"
-       )
-      && ok;
+      std::filesystem::path("/tmp/noctalia-path-test-state") / applicationIdentity().name;
+  TEST_CHECK(
+      scripting::plugin_paths::localSourceRoot()
+      == std::filesystem::path("/tmp/noctalia-path-test-data") / applicationIdentity().name / "plugins"
+  );
+  TEST_CHECK(scripting::plugin_paths::sourceStorageRoot(gitSource) == stateRoot / "plugins/sources/official");
+  TEST_CHECK(scripting::plugin_paths::gitRepoRoot(gitSource) == stateRoot / "plugins/sources/official/repo");
+  TEST_CHECK(scripting::plugin_paths::gitMaterializedRoot(gitSource) == stateRoot / "plugins/materialized/official");
+  TEST_CHECK(scripting::plugin_paths::registryRoot(gitSource) == stateRoot / "plugins/materialized/official");
+  TEST_CHECK(isDefaultPluginSourceName("official"));
+  TEST_CHECK(isDefaultPluginSourceName("community"));
+  TEST_CHECK(!isDefaultPluginSourceName("dev"));
+  // Path source registry root expands the user path
+  TEST_CHECK(scripting::plugin_paths::registryRoot(pathSource).string().ends_with("/dev/noctalia-plugins"));
+  TEST_CHECK(scripting::plugin_paths::pathIsInside("/tmp/noctalia/a/b", "/tmp/noctalia"));
+  // Parent path must not count as inside itself
+  TEST_CHECK(!scripting::plugin_paths::pathIsInside("/tmp/noctalia", "/tmp/noctalia"));
+  // Sibling prefix must not count as inside parent
+  TEST_CHECK(!scripting::plugin_paths::pathIsInside("/tmp/noctalia-other/a", "/tmp/noctalia"));
 
-  return ok ? 0 : 1;
+  return 0;
 }

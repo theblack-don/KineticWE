@@ -1,9 +1,9 @@
 #include "autostart.h"
 
 #include "core/log.h"
-#include "core/process/process.h"
 #include "system/desktop_entry.h"
 #include "system/desktop_entry_launch.h"
+#include "system/process.h"
 
 #include <algorithm>
 #include <cstdlib>

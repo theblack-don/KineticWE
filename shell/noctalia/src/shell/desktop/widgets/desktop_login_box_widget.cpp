@@ -15,13 +15,14 @@ namespace {
 
   constexpr float kLoginGlyphSize = 16.0F;
 
-  [[nodiscard]] bool isStyleSetting(std::string_view key) {
+  bool isStyleSetting(std::string_view key) {
     return key == "background_color"
         || key == "background_opacity"
         || key == "background_radius"
         || key == lockscreen_login_box::kLayoutKey
         || key == lockscreen_login_box::kShowSessionButtonsKey
         || key == lockscreen_login_box::kShowMediaKey
+        || key == lockscreen_login_box::kShowMediaControlsKey
         || key == lockscreen_login_box::kShowWeatherKey
         || key == lockscreen_login_box::kShowLoginButtonKey
         || key == lockscreen_login_box::kShowCapsLockKey
@@ -130,11 +131,11 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
             .fill = resolveColorSpec(style.panelFill),
             .border = colorForRole(ColorRole::OutlineVariant, style.panelOpacity),
             .fillMode = FillMode::Solid,
-            .radius = Style::scaledRadius(style.panelRadius),
             .softness = 1.0F,
             .borderWidth = Style::borderWidth,
         }
     );
+    m_panel->setStyleRadius(style.panelRadius);
   }
 
   const float padV = Style::spaceLg;
@@ -158,9 +159,9 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
             RoundedRectStyle{
                 .fill = colorForRole(ColorRole::Surface, 0.35F),
                 .fillMode = FillMode::Solid,
-                .radius = Style::scaledRadius(style.inputRadius),
             }
         );
+        m_infoGhost->setStyleRadius(style.inputRadius);
       }
     }
     const float halfGap = Style::spaceSm;
@@ -182,9 +183,9 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
             RoundedRectStyle{
                 .fill = colorForRole(ColorRole::Primary, 0.18F),
                 .fillMode = FillMode::Solid,
-                .radius = Style::scaledRadius(style.inputRadius),
             }
         );
+        m_mediaGhost->setStyleRadius(style.inputRadius);
       }
     }
     if (m_weatherGhost != nullptr) {
@@ -201,9 +202,9 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
             RoundedRectStyle{
                 .fill = colorForRole(ColorRole::Secondary, 0.18F),
                 .fillMode = FillMode::Solid,
-                .radius = Style::scaledRadius(style.inputRadius),
             }
         );
+        m_weatherGhost->setStyleRadius(style.inputRadius);
       }
     }
     if (showInfoExtras) {
@@ -243,11 +244,11 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
               .fill = resolveColorSpec(style.panelFill),
               .border = colorForRole(ColorRole::OutlineVariant, style.panelOpacity),
               .fillMode = FillMode::Solid,
-              .radius = Style::scaledRadius(style.panelRadius),
               .softness = 1.0F,
               .borderWidth = Style::borderWidth,
           }
       );
+      m_statusGhost->setStyleRadius(style.panelRadius);
     }
   }
 
@@ -283,10 +284,10 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
             .fill = colorForRole(ColorRole::Surface, style.inputOpacity),
             .border = colorForRole(ColorRole::OutlineVariant),
             .fillMode = FillMode::Solid,
-            .radius = Style::scaledRadius(style.inputRadius),
             .borderWidth = Style::borderWidth,
         }
     );
+    m_passwordGhost->setStyleRadius(style.inputRadius);
   }
 
   if (m_loginButtonGhost != nullptr) {
@@ -298,9 +299,9 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
           RoundedRectStyle{
               .fill = colorForRole(ColorRole::Primary, 0.9F),
               .fillMode = FillMode::Solid,
-              .radius = Style::scaledRadius(style.inputRadius),
           }
       );
+      m_loginButtonGhost->setStyleRadius(style.inputRadius);
     }
   }
 
@@ -333,9 +334,9 @@ void DesktopLoginBoxWidget::doLayout(Renderer& renderer) {
         RoundedRectStyle{
             .fill = colorForRole(ColorRole::Surface, 0.55F),
             .fillMode = FillMode::Solid,
-            .radius = Style::scaledRadius(style.inputRadius),
         }
     );
+    ghost->setStyleRadius(style.inputRadius);
   }
 
   if (Node* rootNode = root()) {

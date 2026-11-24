@@ -1,11 +1,11 @@
 #include "icons_page.h"
 
 #include "core/log.h"
-#include "core/process/process.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "i18n/i18n.h"
 #include "ini_config.h"
 #include "render/core/renderer.h"
+#include "system/process.h"
 #include "theme/kde_color_scheme.h"
 #include "theme_discovery.h"
 #include "ui/builders.h"

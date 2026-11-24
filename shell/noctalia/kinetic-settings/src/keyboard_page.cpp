@@ -9,7 +9,7 @@
 #include "ui/controls/flex.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/label.h"
-#include "ui/controls/search_picker.h"
+#include "shell/controls/search_picker.h"
 #include "ui/controls/select.h"
 #include "ui/controls/separator.h"
 #include "ui/controls/stepper.h"

@@ -9,6 +9,7 @@
 #include "scripting/plugin_api.h"
 #include "scripting/plugin_file_cache.h"
 #include "scripting/plugin_id.h"
+#include "shell/controls/markdown_view.h"
 #include "shell/settings/plugin_store_tile.h"
 #include "ui/builders.h"
 #include "ui/controls/button.h"
@@ -16,7 +17,6 @@
 #include "ui/controls/image.h"
 #include "ui/controls/input.h"
 #include "ui/controls/label.h"
-#include "ui/controls/markdown_view.h"
 #include "ui/controls/scroll_view.h"
 #include "ui/controls/segmented.h"
 #include "ui/controls/virtual_grid_view.h"
@@ -29,8 +29,11 @@
 #include <cmath>
 #include <fstream>
 #include <iterator>
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace settings {
 
@@ -71,6 +74,74 @@ namespace settings {
               }).empty();
     }
 
+    int hexDigitValue(char ch) {
+      if (ch >= '0' && ch <= '9') {
+        return ch - '0';
+      }
+      if (ch >= 'a' && ch <= 'f') {
+        return ch - 'a' + 10;
+      }
+      if (ch >= 'A' && ch <= 'F') {
+        return ch - 'A' + 10;
+      }
+      return -1;
+    }
+
+    // Maps a README image reference to a file in the plugin directory ("./assets/a%20b.png" ->
+    // "assets/a b.png"). URLs, root-absolute paths and paths leaving the plugin directory have no
+    // plugin file.
+    std::optional<std::string> readmeImageFile(std::string_view src) {
+      const std::size_t delimiter = src.find_first_of(":/?#");
+      if (src.empty() || src.front() == '/' || (delimiter != std::string_view::npos && src[delimiter] == ':')) {
+        return std::nullopt;
+      }
+      src = src.substr(0, src.find_first_of("?#"));
+
+      std::vector<std::string> parts;
+      std::string part;
+      const auto pushPart = [&] {
+        if (part == "..") {
+          if (parts.empty()) {
+            return false;
+          }
+          parts.pop_back();
+        } else if (!part.empty() && part != ".") {
+          parts.push_back(std::move(part));
+        }
+        part.clear();
+        return true;
+      };
+      for (std::size_t i = 0; i < src.size(); ++i) {
+        const char ch = src[i];
+        if (ch == '/') {
+          if (!pushPart()) {
+            return std::nullopt;
+          }
+          continue;
+        }
+        if (ch == '%' && i + 2 < src.size()) {
+          const int hi = hexDigitValue(src[i + 1]);
+          const int lo = hexDigitValue(src[i + 2]);
+          if (hi >= 0 && lo >= 0) {
+            part.push_back(static_cast<char>((hi << 4) | lo));
+            i += 2;
+            continue;
+          }
+        }
+        part.push_back(ch);
+      }
+      if (!pushPart() || parts.empty()) {
+        return std::nullopt;
+      }
+
+      std::string file = std::move(parts.front());
+      for (std::size_t i = 1; i < parts.size(); ++i) {
+        file += '/';
+        file += parts[i];
+      }
+      return file;
+    }
+
     class PluginStoreAdapter final : public VirtualGridAdapter {
     public:
       explicit PluginStoreAdapter(float scale) : m_scale(scale) {}
@@ -81,9 +152,8 @@ namespace settings {
       void setCallbacks(const PluginStoreCallbacks* callbacks) { m_callbacks = callbacks; }
       void setThumbnailPaths(const std::unordered_map<std::string, std::string>* paths) { m_thumbnailPaths = paths; }
       void setRenderer(Renderer* r) { m_renderer = r; }
-      void setTextureCache(AsyncTextureCache* c) { m_textureCache = c; }
 
-      [[nodiscard]] std::size_t itemCount() const override { return m_indices != nullptr ? m_indices->size() : 0; }
+      std::size_t itemCount() const override { return m_indices != nullptr ? m_indices->size() : 0; }
 
       [[nodiscard]] std::unique_ptr<Node> createTile() override { return std::make_unique<PluginStoreTile>(m_scale); }
 
@@ -103,7 +173,7 @@ namespace settings {
           }
         }
         t->bind(
-            storeEntry.entry, storeEntry.source, onDisk, selected, hovered, thumbPath, m_renderer, m_textureCache,
+            storeEntry.entry, storeEntry.source, onDisk, selected, hovered, thumbPath, m_renderer,
             m_content != nullptr ? m_content->recommendationCount(storeEntry) : std::nullopt,
             m_content != nullptr && m_content->isRecommended(storeEntry), storeEntry.listed
         );
@@ -123,7 +193,6 @@ namespace settings {
       const PluginStoreCallbacks* m_callbacks = nullptr;
       const std::unordered_map<std::string, std::string>* m_thumbnailPaths = nullptr;
       Renderer* m_renderer = nullptr;
-      AsyncTextureCache* m_textureCache = nullptr;
     };
 
   } // namespace
@@ -176,6 +245,7 @@ namespace settings {
     m_grid = nullptr;
     m_countLabel = nullptr;
     m_sortButton = nullptr;
+    m_detailMarkdown = nullptr;
   }
 
   void PluginStoreContent::requestRebuild() {
@@ -186,6 +256,8 @@ namespace settings {
   }
 
   void PluginStoreContent::setOnRebuildNeeded(std::function<void()> cb) { m_onRebuildNeeded = std::move(cb); }
+
+  void PluginStoreContent::setOnLayoutNeeded(std::function<void()> cb) { m_onLayoutNeeded = std::move(cb); }
 
   bool PluginStoreContent::isDetailView() const noexcept { return m_detailIndex.has_value(); }
 
@@ -228,7 +300,7 @@ namespace settings {
     }
     m_sortMode = mode;
     if (m_config != nullptr) {
-      (void)m_config->setStateString("plugin_store", "sort", sortModeStateValue(mode));
+      m_config->setStateString("plugin_store", "sort", sortModeStateValue(mode));
     }
 
     syncSortButtonGlyph();
@@ -371,7 +443,8 @@ namespace settings {
       if (!entry.listed) {
         continue;
       }
-      std::string path = m_fileCache->resolve(entry.entry.id, entry.sourceConfig, "thumbnail.webp");
+      std::string path =
+          m_fileCache->resolve(entry.entry.id, entry.sourceConfig, entry.entry.resolvedRevision, "thumbnail.webp");
       if (!path.empty()) {
         m_thumbnailPaths[entry.entry.id] = path;
       }
@@ -519,7 +592,8 @@ namespace settings {
     sortEntries();
   }
 
-  void PluginStoreContent::populateBody(Flex& body, Renderer& renderer, AsyncTextureCache* textureCache) {
+  void PluginStoreContent::populateBody(Flex& body, Renderer& renderer) {
+    m_detailMarkdown = nullptr;
     const auto detailKey = isDetailView() && *m_detailIndex < m_filteredIndices.size()
         ? std::optional<std::string>(m_catalog[m_filteredIndices[*m_detailIndex]].key())
         : std::nullopt;
@@ -528,16 +602,15 @@ namespace settings {
       m_detailIndex = indexOfPluginKey(*detailKey);
     }
     if (m_detailIndex.has_value()) {
-      buildDetailView(body, renderer, textureCache);
+      buildDetailView(body, renderer);
     } else {
-      buildGridView(body, renderer, textureCache);
+      buildGridView(body, renderer);
     }
   }
 
-  void PluginStoreContent::buildGridView(Flex& body, Renderer& renderer, AsyncTextureCache* textureCache) {
+  void PluginStoreContent::buildGridView(Flex& body, Renderer& renderer) {
     uiAssertNotRendering("PluginStoreContent::buildGridView");
     m_renderer = &renderer;
-    m_textureCache = textureCache;
     const float scale = m_callbacks.scale;
 
     body.addChild(
@@ -636,7 +709,8 @@ namespace settings {
               .text = allTags[i],
               .fontSize = Style::fontSizeCaption * scale,
               .variant = selected ? ButtonVariant::Primary : ButtonVariant::Default,
-              .radius = Style::scaledRadiusMd(scale),
+              .styleRadius = Style::radiusMd,
+              .styleRadiusScale = scale,
               .onClick = [this, tag = std::move(tag)] {
                 m_selectedTag = tag;
                 applyFilter();
@@ -671,7 +745,8 @@ namespace settings {
             .minWidth = Style::controlHeight * scale,
             .minHeight = Style::controlHeight * scale,
             .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusMd(scale),
+            .styleRadius = Style::radiusMd,
+            .styleRadiusScale = scale,
             .onClick = [this] { cycleSortMode(); },
         })
     );
@@ -703,7 +778,6 @@ namespace settings {
     adapterPtr->setCallbacks(&m_callbacks);
     adapterPtr->setThumbnailPaths(&m_thumbnailPaths);
     adapterPtr->setRenderer(&renderer);
-    adapterPtr->setTextureCache(textureCache);
     m_adapter = std::move(adapter);
 
     auto grid = ui::virtualGridView({
@@ -745,7 +819,7 @@ namespace settings {
     }
   }
 
-  void PluginStoreContent::buildDetailView(Flex& body, Renderer& renderer, AsyncTextureCache* textureCache) {
+  void PluginStoreContent::buildDetailView(Flex& body, Renderer& renderer) {
     uiAssertNotRendering("PluginStoreContent::buildDetailView");
     if (!m_detailIndex.has_value() || *m_detailIndex >= m_filteredIndices.size()) {
       return;
@@ -782,7 +856,8 @@ namespace settings {
           {.align = FlexAlign::Center,
            .paddingH = Style::spaceXs * scale,
            .fill = colorSpecFromRole(bg, bgAlpha),
-           .radius = Style::scaledRadiusSm(scale)},
+           .styleRadius = Style::radiusSm,
+           .styleRadiusScale = scale},
           ui::label({
               .out = &label,
               .text = text,
@@ -808,18 +883,19 @@ namespace settings {
       thumbnailHeight = 200.0F * scale;
       auto img = ui::image({
           .fit = ImageFit::Contain,
-          .radius = Style::scaledRadiusMd(scale),
+          .styleRadius = Style::radiusMd,
+          .styleRadiusScale = scale,
           .width = thumbnailWidth,
           .height = thumbnailHeight,
       });
       const int thumbTargetSize = static_cast<int>(std::ceil(320.0F * scale));
-      if (textureCache != nullptr) {
-        if (!img->setSourceFileAsync(renderer, *textureCache, thumbIt->second, thumbTargetSize, true)) {
-          img->setAsyncReadyCallback(m_onRebuildNeeded);
+      // Rebuild once the thumbnail lands so the header sizes itself from its aspect ratio.
+      img->setAsyncReadyCallback([this, image = img.get()] {
+        if (image->loadState() == ImageLoadState::Ready && m_onRebuildNeeded) {
+          m_onRebuildNeeded();
         }
-      } else {
-        img->setSourceFile(renderer, thumbIt->second, thumbTargetSize, true);
-      }
+      });
+      img->setSourceFile(renderer, thumbIt->second, {.targetSize = thumbTargetSize, .mipmap = true});
       if (img->hasImage()) {
         thumbnailHeight = std::min(thumbnailHeight, thumbnailWidth / img->aspectRatio());
         img->setSize(thumbnailWidth, thumbnailHeight);
@@ -1107,7 +1183,27 @@ namespace settings {
       );
     } else if (!m_detailReadme.empty()) {
       auto md = std::make_unique<MarkdownView>();
+      if (m_fileCache != nullptr) {
+        md->setImageSource({
+            .renderer = &renderer,
+            .resolve = [this, id = entry.id, revision = entry.resolvedRevision,
+                        source = storeEntry.sourceConfig](const std::string& src) -> std::optional<std::string> {
+              const auto file = readmeImageFile(src);
+              if (!file.has_value()) {
+                return std::nullopt;
+              }
+              return m_fileCache->resolve(id, source, revision, *file);
+            },
+            .onLayoutNeeded =
+                [this] {
+                  if (m_onLayoutNeeded) {
+                    m_onLayoutNeeded();
+                  }
+                },
+        });
+      }
       md->setMarkdown(m_detailReadme, scale);
+      m_detailMarkdown = md.get();
       dc->addChild(std::move(md));
     } else {
       dc->addChild(
@@ -1134,7 +1230,9 @@ namespace settings {
     const auto& storeEntry = m_catalog[m_filteredIndices[filteredIndex]];
     if (storeEntry.listed && m_fileCache != nullptr) {
       m_detailReadmeLoading = true;
-      std::string path = m_fileCache->resolve(storeEntry.entry.id, storeEntry.sourceConfig, "README.md");
+      std::string path = m_fileCache->resolve(
+          storeEntry.entry.id, storeEntry.sourceConfig, storeEntry.entry.resolvedRevision, "README.md"
+      );
       if (!path.empty()) {
         std::ifstream f(path);
         if (f.is_open()) {
@@ -1309,6 +1407,13 @@ namespace settings {
         m_detailReadmeLoading = false;
         requestRebuild();
       }
+    }
+
+    // Any other file of the open plugin may be a README image that was still being fetched.
+    if (m_detailMarkdown != nullptr
+        && isDetailView()
+        && m_catalog[m_filteredIndices[*m_detailIndex]].entry.id == pluginId) {
+      m_detailMarkdown->refreshPendingImages();
     }
   }
 

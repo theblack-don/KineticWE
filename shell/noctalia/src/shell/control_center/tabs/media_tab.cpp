@@ -13,10 +13,11 @@
 #include "shell/control_center/tab.h"
 #include "shell/panel/panel_button_style.h"
 #include "shell/panel/panel_manager.h"
+#include "shell/visuals/audio_visualizer.h"
 #include "ui/builders.h"
 #include "ui/controls/context_menu.h"
 #include "ui/controls/context_menu_popup.h"
-#include "ui/visuals/audio_visualizer.h"
+#include "ui/controls/image.h"
 
 #include <algorithm>
 #include <chrono>
@@ -59,7 +60,7 @@ namespace {
     return playbackStatus == "Playing" ? "media-pause" : "media-play";
   }
 
-  [[nodiscard]] int mediaTabArtDecodeSize(float scale) {
+  int mediaTabArtDecodeSize(float scale) {
     // Match the widest artwork layout bound (see mediaWidth in doLayout).
     return static_cast<int>(std::round(kMediaUnit * 11.0F * scale));
   }
@@ -161,7 +162,7 @@ void MediaTab::openPlayerMenu() {
               },
           .parent =
               PopupSurfaceParent{
-                  .layerSurface = parentCtx->layerSurface,
+                  .attach = parentCtx->attach,
                   .output = parentCtx->output,
               },
           .pointerParentSurface = parentCtx->surface,
@@ -247,9 +248,18 @@ std::unique_ptr<Flex> MediaTab::create() {
       ui::image({
           .out = &m_artwork,
           .fit = ImageFit::Cover,
-          .radius = Style::scaledRadiusXl(scale),
+          .styleRadius = Style::radiusXl,
+          .styleRadiusScale = scale,
           .width = kArtworkSize * scale,
           .height = kArtworkSize * scale,
+          .configure = [](Image& image) {
+            image.setAsyncReadyCallback([&image] {
+              if (image.loadState() == ImageLoadState::Failed) {
+                kLog.warn(R"(artwork load failed path="{}")", image.sourcePath());
+              }
+              PanelManager::instance().requestLayout();
+            });
+          },
       })
   );
   mediaStack->addChild(std::move(artworkRow));
@@ -330,7 +340,8 @@ std::unique_ptr<Flex> MediaTab::create() {
           .minWidth = kMediaControlsHeight * scale,
           .minHeight = kMediaControlsHeight * scale,
           .padding = Style::spaceSm * scale,
-          .radius = Style::scaledRadiusLg(scale),
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = scale,
           .onClick = [this] {
             const std::weak_ptr<void> aliveGuard = m_aliveGuard;
             DeferredCall::callLater([this, aliveGuard] {
@@ -339,7 +350,7 @@ std::unique_ptr<Flex> MediaTab::create() {
               }
               const auto current = m_mpris->loopStatusActive().value_or("None");
               const std::string next = current == "None" ? "Playlist" : (current == "Playlist" ? "Track" : "None");
-              (void)m_mpris->setLoopStatusActive(next);
+              m_mpris->setLoopStatusActive(next);
               PanelManager::instance().refresh();
             });
           },
@@ -354,14 +365,15 @@ std::unique_ptr<Flex> MediaTab::create() {
           .minWidth = kMediaControlsHeight * scale,
           .minHeight = kMediaControlsHeight * scale,
           .padding = Style::spaceSm * scale,
-          .radius = Style::scaledRadiusLg(scale),
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = scale,
           .onClick = [this] {
             const std::weak_ptr<void> aliveGuard = m_aliveGuard;
             DeferredCall::callLater([this, aliveGuard] {
               if (aliveGuard.expired() || m_mpris == nullptr) {
                 return;
               }
-              (void)m_mpris->previousActive();
+              m_mpris->previousActive();
               PanelManager::instance().refresh();
             });
           },
@@ -376,14 +388,15 @@ std::unique_ptr<Flex> MediaTab::create() {
           .minWidth = kMediaPlayPauseHeight * scale,
           .minHeight = kMediaPlayPauseHeight * scale,
           .padding = Style::spaceSm * scale,
-          .radius = Style::scaledRadiusLg(scale),
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = scale,
           .onClick = [this] {
             const std::weak_ptr<void> aliveGuard = m_aliveGuard;
             DeferredCall::callLater([this, aliveGuard] {
               if (aliveGuard.expired() || m_mpris == nullptr) {
                 return;
               }
-              (void)m_mpris->playPauseActive();
+              m_mpris->playPauseActive();
               PanelManager::instance().refresh();
             });
           },
@@ -398,14 +411,15 @@ std::unique_ptr<Flex> MediaTab::create() {
           .minWidth = kMediaControlsHeight * scale,
           .minHeight = kMediaControlsHeight * scale,
           .padding = Style::spaceSm * scale,
-          .radius = Style::scaledRadiusLg(scale),
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = scale,
           .onClick = [this] {
             const std::weak_ptr<void> aliveGuard = m_aliveGuard;
             DeferredCall::callLater([this, aliveGuard] {
               if (aliveGuard.expired() || m_mpris == nullptr) {
                 return;
               }
-              (void)m_mpris->nextActive();
+              m_mpris->nextActive();
               PanelManager::instance().refresh();
             });
           },
@@ -420,7 +434,8 @@ std::unique_ptr<Flex> MediaTab::create() {
           .minWidth = kMediaControlsHeight * scale,
           .minHeight = kMediaControlsHeight * scale,
           .padding = Style::spaceSm * scale,
-          .radius = Style::scaledRadiusLg(scale),
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = scale,
           .onClick = [this] {
             const std::weak_ptr<void> aliveGuard = m_aliveGuard;
             DeferredCall::callLater([this, aliveGuard] {
@@ -428,7 +443,7 @@ std::unique_ptr<Flex> MediaTab::create() {
                 return;
               }
               const bool enabled = m_mpris->shuffleActive().value_or(false);
-              (void)m_mpris->setShuffleActive(!enabled);
+              m_mpris->setShuffleActive(!enabled);
               PanelManager::instance().refresh();
             });
           },
@@ -560,7 +575,7 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
         button->setMinHeight(sideButtonSize);
         button->setGlyphSize(sideGlyphSize);
         button->setPadding(Style::spaceSm * scale, Style::spaceSm * scale);
-        button->setRadius(Style::scaledRadiusLg(scale));
+        button->setStyleRadius(Style::radiusLg, scale);
       }
     }
     if (m_playPauseButton != nullptr) {
@@ -568,7 +583,7 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
       m_playPauseButton->setMinHeight(playPauseButtonSize);
       m_playPauseButton->setGlyphSize(playPauseGlyphSize);
       m_playPauseButton->setPadding(Style::spaceSm * scale, Style::spaceSm * scale);
-      m_playPauseButton->setRadius(Style::scaledRadiusLg(scale));
+      m_playPauseButton->setStyleRadius(Style::radiusLg, scale);
     }
   }
 
@@ -597,7 +612,7 @@ void MediaTab::doLayout(Renderer& renderer, float contentWidth, float bodyHeight
     // Media art is always presented as a square (album-art convention).
     const float side = std::min(artWidth, artHeight);
     m_artwork->setSize(side, side);
-    m_artwork->setRadius(Style::scaledRadiusXl(scale));
+    m_artwork->setStyleRadius(Style::radiusXl, scale);
     m_mediaStack->layout(renderer);
   }
 
@@ -651,7 +666,7 @@ void MediaTab::doUpdate(Renderer& renderer) {
   refresh(renderer);
 }
 
-void MediaTab::onFrameTick(float deltaMs) {
+void MediaTab::onFrameTick(float deltaMs, Renderer& /*renderer*/) {
   if (!m_active || !m_showVisualizer) {
     return;
   }
@@ -663,7 +678,7 @@ void MediaTab::onFrameTick(float deltaMs) {
       m_visualizerSpectrum->setValues(m_spectrum->values(m_spectrumListenerId));
     }
 
-    m_visualizerSpectrum->tick(deltaMs);
+    m_visualizerSpectrum->advance(deltaMs, m_spectrum != nullptr && !m_spectrum->idle());
   }
 }
 
@@ -768,9 +783,9 @@ void MediaTab::commitPendingSeek(double valueSeconds) {
       return;
     }
     if (!seekBusName.empty()) {
-      (void)m_mpris->setPosition(seekBusName, targetUs);
+      m_mpris->setPosition(seekBusName, targetUs);
     } else {
-      (void)m_mpris->setPositionActive(targetUs);
+      m_mpris->setPositionActive(targetUs);
     }
     PanelManager::instance().refresh();
   });
@@ -854,6 +869,14 @@ void MediaTab::refresh(Renderer& renderer) {
       livePositionUs = std::max<std::int64_t>(0, livePositionUs);
     }
 
+    // A new track ends a seek still waiting on the previous one, and the hold after it, so the bar starts at 0:00.
+    if (m_positionBusName == player.busName
+        && !m_positionTrackSignature.empty()
+        && m_positionTrackSignature != trackSignature) {
+      m_pendingSeekBusName.clear();
+      m_pendingSeekUs = -1;
+      m_progressSettleUntil = {};
+    }
     const bool pendingMatchesPlayer = m_pendingSeekBusName.empty() || m_pendingSeekBusName == player.busName;
     const bool seekArrived = pendingMatchesPlayer
         && m_pendingSeekUs >= 0
@@ -919,26 +942,21 @@ void MediaTab::refresh(Renderer& renderer) {
         m_aliveGuard
     );
 
-    if (m_artwork != nullptr
-        && (!resolvedArtUrl.empty() && (resolvedArtUrl != m_lastArtPath || !m_artwork->hasImage()))) {
-      bool loaded = false;
+    if (m_artwork != nullptr && !resolvedArtUrl.empty() && resolvedArtUrl != m_lastArtPath) {
       if (artPath.empty()) {
         kLog.debug("artwork unresolved url=\"{}\"", resolvedArtUrl);
         clearArt(renderer);
-      } else if (!m_artwork->setSourceFile(renderer, artPath, mediaTabArtDecodeSize(contentScale()), true, true)) {
-        kLog.warn(R"(artwork load failed url="{}" path="{}")", resolvedArtUrl, artPath);
-        clearArt(renderer);
       } else {
-        kLog.debug(R"(artwork loaded url="{}" path="{}")", resolvedArtUrl, artPath);
-        loaded = true;
-      }
-
-      // Only lock this URL once we actually have an image.
-      // Otherwise keep retrying while metadata/download catches up.
-      m_lastArtPath = loaded ? resolvedArtUrl : std::string{};
-      if (loaded) {
+        kLog.debug(R"(artwork requested url="{}" path="{}")", resolvedArtUrl, artPath);
+        m_artwork->setSourceFile(
+            renderer, artPath,
+            {.targetSize = mediaTabArtDecodeSize(contentScale()), .mipmap = true, .centerSquareCrop = true}
+        );
         PanelManager::instance().requestLayout();
       }
+
+      // Only lock this URL once the art resolved to a source; otherwise keep retrying while the download catches up.
+      m_lastArtPath = artPath.empty() ? std::string{} : resolvedArtUrl;
     } else if (m_artwork != nullptr && resolvedArtUrl.empty()) {
       clearArt(renderer);
       m_lastArtPath.clear();

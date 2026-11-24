@@ -3,17 +3,18 @@
 // teardown returns within one grace period and leaves no hook process behind.
 
 #include "config/config_service.h"
+#include "core/application_identity.h"
 #include "tests/test_check.h"
 #include "theme/palette.h"
 #include "theme/template_apply_service.h"
 
 #include <cerrno>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <memory>
-#include <signal.h>
 #include <string>
 #include <sys/types.h>
 #include <thread>
@@ -65,7 +66,7 @@ namespace {
       const std::filesystem::path& root, const std::string& templates,
       const std::vector<std::filesystem::path>& pidFiles, std::vector<pid_t>& pids
   ) {
-    writeFile(root / "config" / "noctalia" / "config.toml", templates);
+    writeFile(root / "config" / applicationIdentity().name / "config.toml", templates);
 
     auto config = std::make_unique<ConfigService>();
     auto service = std::make_unique<TemplateApplyService>(*config, kGrace);
@@ -159,7 +160,10 @@ namespace {
         root / "assets" / "templates" / "builtin.toml",
         "[templates.stuck]\nundo_hook = \"" + hangCommand(pidFile) + "\"\n"
     );
-    writeFile(root / "state" / "noctalia" / "state.toml", "[theme_templates]\napplied_builtin_ids = \"stuck\"\n");
+    writeFile(
+        root / "state" / applicationIdentity().name / "state.toml",
+        "[theme_templates]\napplied_builtin_ids = \"stuck\"\n"
+    );
 
     std::vector<pid_t> pids;
     const double elapsed = applyThenDestroy(root, "", {pidFile}, pids);
@@ -173,10 +177,13 @@ namespace {
   // runs on the same synchronous path and must be bounded the same way.
   void test_stuck_community_undo_hook(const std::filesystem::path& root) {
     const auto pidFile = root / "community-undo.pid";
-    const auto templateDir = root / "state" / "noctalia" / "community-templates" / "stuck";
+    const auto templateDir = root / "state" / applicationIdentity().name / "community-templates" / "stuck";
     std::filesystem::create_directories(templateDir);
     writeFile(templateDir / "template.toml", "[templates.stuck]\nundo_hook = \"" + hangCommand(pidFile) + "\"\n");
-    writeFile(root / "state" / "noctalia" / "state.toml", "[theme_templates]\napplied_community_ids = \"stuck\"\n");
+    writeFile(
+        root / "state" / applicationIdentity().name / "state.toml",
+        "[theme_templates]\napplied_community_ids = \"stuck\"\n"
+    );
 
     std::vector<pid_t> pids;
     const double elapsed = applyThenDestroy(root, "", {pidFile}, pids);
@@ -192,8 +199,8 @@ int main() {
   const std::filesystem::path root =
       std::filesystem::temp_directory_path() / ("noctalia-template-shutdown-" + std::to_string(::getpid()));
   std::filesystem::remove_all(root);
-  std::filesystem::create_directories(root / "config" / "noctalia");
-  std::filesystem::create_directories(root / "state" / "noctalia");
+  std::filesystem::create_directories(root / "config" / applicationIdentity().name);
+  std::filesystem::create_directories(root / "state" / applicationIdentity().name);
   std::filesystem::create_directories(root / "data");
   ::setenv("NOCTALIA_CONFIG_HOME", (root / "config").c_str(), 1);
   ::setenv("NOCTALIA_STATE_HOME", (root / "state").c_str(), 1);
@@ -207,7 +214,7 @@ int main() {
   writeFile(root / "assets" / "fonts" / "noctalia-tabler.ttf", "");
   writeFile(root / "assets" / "templates" / "builtin.toml", "");
   writeFile(root / "assets" / "translations" / "en.json", "{}\n");
-  ::setenv("NOCTALIA_ASSETS_DIR", (root / "assets").c_str(), 1);
+  ::setenv("NOCTALIA_APP_ASSETS_DIR", (root / "assets").c_str(), 1);
 
   test_stuck_inline_post_hook(root);
   test_stuck_sync_and_async_hooks_share_one_deadline(root);
@@ -217,7 +224,7 @@ int main() {
   ::unsetenv("NOCTALIA_CONFIG_HOME");
   ::unsetenv("NOCTALIA_STATE_HOME");
   ::unsetenv("NOCTALIA_DATA_HOME");
-  ::unsetenv("NOCTALIA_ASSETS_DIR");
+  ::unsetenv("NOCTALIA_APP_ASSETS_DIR");
   std::filesystem::remove_all(root);
   return 0;
 }

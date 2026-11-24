@@ -3,6 +3,7 @@
 #include "config/config_service.h"
 #include "config/config_types.h"
 #include "i18n/i18n.h"
+#include "notification/notifications.h"
 #include "shell/settings/settings_content.h"
 #include "ui/builders.h"
 #include "ui/controls/collapsible.h"
@@ -26,10 +27,29 @@ namespace settings {
   } // namespace
 
   bool isMonitorOverrideSettingPath(const std::vector<std::string>& path) {
-    return path.size() >= 5 && path[0] == "bar" && path[2] == "monitor";
+    if (path.size() >= 5 && path[0] == "bar" && path[2] == "monitor") {
+      return true;
+    }
+    return path.size() == 4 && path[0] == "brightness" && path[1] == "monitor";
   }
 
   bool monitorOverrideHasExplicitValue(const Config& cfg, const std::vector<std::string>& path) {
+    if (path.size() == 4 && path[0] == "brightness" && path[1] == "monitor") {
+      for (const auto& override : cfg.brightness.monitorOverrides) {
+        if (override.match != path[2]) {
+          continue;
+        }
+        const std::string_view key = path.back();
+        if (key == "scheduled_day_brightness") {
+          return override.scheduledDayBrightness.has_value();
+        }
+        if (key == "scheduled_night_brightness") {
+          return override.scheduledNightBrightness.has_value();
+        }
+        return false;
+      }
+      return false;
+    }
     if (!isMonitorOverrideSettingPath(path)) {
       return false;
     }
@@ -56,6 +76,9 @@ namespace settings {
     }
     if (key == "smart_auto_hide") {
       return override->smartAutoHide.has_value();
+    }
+    if (key == "auto_hide_reserve_space") {
+      return override->autoHideReserveSpace.has_value();
     }
     if (key == "show_on_workspace_switch") {
       return override->showOnWorkspaceSwitch.has_value();
@@ -289,7 +312,7 @@ namespace settings {
         .visible = !props.message.empty(),
         .configure = [scale, error](Flex& row) {
           row.setPadding(Style::spaceXs * scale, Style::spaceSm * scale);
-          row.setRadius(Style::scaledRadiusMd(scale));
+          row.setStyleRadius(Style::radiusMd, scale);
           row.setFill(colorSpecFromRole(error ? ColorRole::Error : ColorRole::Secondary, 0.14F));
           row.setBorder(colorSpecFromRole(error ? ColorRole::Error : ColorRole::Secondary, 0.45F), Style::borderWidth);
         },
@@ -336,7 +359,8 @@ namespace settings {
               .minWidth = Style::controlHeightSm * scale,
               .minHeight = Style::controlHeightSm * scale,
               .padding = Style::spaceXs * scale,
-              .radius = Style::scaledRadiusSm(scale),
+              .styleRadius = Style::radiusSm,
+              .styleRadiusScale = scale,
               .onClick = std::move(props.onDismiss),
           })
       );
@@ -356,6 +380,7 @@ namespace settings {
     case SettingsSection::Services:
     case SettingsSection::Wallpaper:
     case SettingsSection::Desktop:
+    case SettingsSection::LockScreen:
     case SettingsSection::Dock:
     case SettingsSection::Panels:
     case SettingsSection::ControlCenter:
@@ -393,6 +418,7 @@ namespace settings {
     case SettingsSection::Services:
     case SettingsSection::Wallpaper:
     case SettingsSection::Desktop:
+    case SettingsSection::LockScreen:
     case SettingsSection::Dock:
     case SettingsSection::Panels:
     case SettingsSection::ControlCenter:
@@ -423,7 +449,7 @@ namespace settings {
         .gap = Style::spaceXs * scale,
         .padding = Style::spaceSm * scale,
         .configure = [scale](Flex& column) {
-          column.setRadius(Style::scaledRadiusMd(scale));
+          column.setStyleRadius(Style::radiusMd, scale);
           column.setFill(colorSpecFromRole(ColorRole::ErrorContainer));
           column.setBorder(colorSpecFromRole(ColorRole::Error), Style::borderWidth);
         },
@@ -652,6 +678,25 @@ namespace settings {
     }
     return i18n::tr(
         "settings.notifications.filter.summary", "match", matchLabel, "flags", StringUtils::join(parts, ", ")
+    );
+  }
+
+  void notifyKeybindRejected(KeybindRejection reason) {
+    // Literal keys so tools/i18n-check.py can see them.
+    std::string detail;
+    switch (reason) {
+    case KeybindRejection::Super:
+      detail = i18n::tr("notifications.internal.keybind-invalid-super");
+      break;
+    case KeybindRejection::Modifier:
+      detail = i18n::tr("notifications.internal.keybind-invalid-modifier");
+      break;
+    case KeybindRejection::Printable:
+      detail = i18n::tr("notifications.internal.keybind-invalid-printable");
+      break;
+    }
+    notify::error(
+        i18n::tr("notifications.internal.keybind-app"), i18n::tr("notifications.internal.keybind-invalid-title"), detail
     );
   }
 

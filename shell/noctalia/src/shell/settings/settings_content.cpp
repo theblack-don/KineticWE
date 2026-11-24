@@ -3,22 +3,22 @@
 #include "config/config_service.h"
 #include "config/config_types.h"
 #include "i18n/i18n.h"
-#include "net/url_open.h"
 #include "notification/notification_filter.h"
+#include "shell/dialogs/glyph_picker_dialog.h"
 #include "shell/settings/bar_widget_editor.h"
 #include "shell/settings/settings_content_common.h"
 #include "shell/settings/settings_control_factory.h"
 #include "ui/builders.h"
+#include "ui/controls/box.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/input.h"
 #include "ui/controls/keybind_recorder.h"
 #include "ui/controls/label.h"
-#include "ui/controls/list_editor.h"
+#include "ui/controls/list_drag.h"
 #include "ui/controls/segmented.h"
 #include "ui/controls/select.h"
 #include "ui/controls/toggle.h"
-#include "ui/dialogs/glyph_picker_dialog.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 
@@ -69,6 +69,7 @@ namespace settings {
         .showAdvanced = ctx.showAdvanced,
         .showOverriddenOnly = ctx.showOverriddenOnly,
         .batteryDeviceOptions = ctx.batteryDeviceOptions,
+        .availableOutputs = ctx.availableOutputs,
         .editingWidgetName = ctx.editingWidgetName,
         .editingCapsuleGroupId = ctx.editingCapsuleGroupId,
         .selectedLaneWidgets = ctx.selectedLaneWidgets,
@@ -81,7 +82,7 @@ namespace settings {
                                 ) { return factory.makeGestureActionRow(setting, title, path); },
         .pendingGestureKey = ctx.pendingGestureKey,
         .pendingGestureVerb = ctx.pendingGestureVerb,
-        .actionsExpandedFor = ctx.actionsExpandedFor,
+        .expandedWidgetGroups = ctx.expandedWidgetGroups,
         .actionCatalog = ctx.actionCatalog,
         .requestRebuild = ctx.requestRebuild,
         .resetContentScroll = ctx.resetContentScroll,
@@ -218,11 +219,11 @@ namespace settings {
             bool integerValue = false, std::string valueSuffix = {},
             const std::function<std::vector<std::pair<std::vector<std::string>, ConfigOverrideValue>>(double)>&
                 linkedCommit = {},
-            SliderSetting::InvertSlot invertSlot = SliderSetting::InvertSlot::None,
-            bool invertEnabled = true) -> std::unique_ptr<Node> {
+            SliderSetting::InvertSlot invertSlot = SliderSetting::InvertSlot::None, bool invertEnabled = true,
+            const std::function<void(double)>& preview = {}) -> std::unique_ptr<Node> {
       return factory.makeSlider(
           value, minValue, maxValue, step, path, integerValue, linkedCommit, std::move(valueSuffix), invertSlot,
-          invertEnabled
+          invertEnabled, preview
       );
     };
 
@@ -252,7 +253,8 @@ namespace settings {
           .minHeight = Style::controlHeight * scale,
           .paddingV = Style::spaceXs * scale,
           .paddingH = Style::spaceSm * scale,
-          .radius = Style::scaledRadiusMd(scale),
+          .styleRadius = Style::radiusMd,
+          .styleRadiusScale = scale,
           .onClick = [setOverride = ctx.setOverride, path, currentValue = setting.value] {
             GlyphPickerDialogOptions options;
             if (!currentValue.empty()) {
@@ -470,7 +472,8 @@ namespace settings {
             .paddingV = Style::spaceXs * scale,
             .paddingH = Style::spaceSm * scale,
             .gap = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusMd(scale),
+            .styleRadius = Style::radiusMd,
+            .styleRadiusScale = scale,
             .flexGrow = 1.0F,
         });
         card->addChild(
@@ -522,7 +525,12 @@ namespace settings {
                   .tooltip = i18n::tr("settings.templates.documentation"),
                   .width = Style::controlHeightSm * scale,
                   .height = Style::controlHeightSm * scale,
-                  .onClick = [url = option.documentationUrl] { (void)net::openInBrowser(url); },
+                  .onClick =
+                      [openBrowserUrl = ctx.openBrowserUrl, url = option.documentationUrl] {
+                        if (openBrowserUrl) {
+                          openBrowserUrl(url);
+                        }
+                      },
                   .configure = [](Button& button) { button.setZIndex(2); },
               })
           );
@@ -606,10 +614,6 @@ namespace settings {
       section.addChild(std::move(block));
     };
 
-    const auto makeListBlock = [&](Flex& section, const SettingEntry& entry, const ListSetting& list) {
-      factory.makeListBlock(section, entry, list);
-    };
-
     const auto makeKeybindListBlock = [&](Flex& section, const SettingEntry& entry,
                                           const KeybindListSetting& keybinds) {
       const bool overridden = (ctx.configService != nullptr && ctx.configService->hasEffectiveOverride(entry.path));
@@ -683,6 +687,7 @@ namespace settings {
                     commitItems(std::move(items));
                   }
                 },
+            .onReject = notifyKeybindRejected,
             .configure = configureGridRecorder,
         });
         row->addChild(std::move(recorder));
@@ -696,7 +701,8 @@ namespace settings {
             .maxWidth = Style::controlHeightSm * scale,
             .maxHeight = Style::controlHeightSm * scale,
             .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusSm(scale),
+            .styleRadius = Style::radiusSm,
+            .styleRadiusScale = scale,
             .onClick = [commitItems, items = keybinds.items, i] mutable {
               if (i >= items.size()) {
                 return;
@@ -730,6 +736,7 @@ namespace settings {
                   items.push_back(chord);
                   commitItems(std::move(items));
                 },
+            .onReject = notifyKeybindRejected,
             .configure =
                 [configureGridRecorder, focusKey = keybindTabFocusKey(".add")](KeybindRecorder& recorder) {
                   configureGridRecorder(recorder);
@@ -752,59 +759,6 @@ namespace settings {
       section.addChild(std::move(block));
     };
 
-    const auto makeShortcutListBlock = [&](Flex& section, const SettingEntry& entry,
-                                           const ShortcutListSetting& shortcuts) {
-      const bool overridden = (ctx.configService != nullptr && ctx.configService->hasEffectiveOverride(entry.path));
-
-      auto block = makeCollectionBlock(entry, overridden);
-
-      std::vector<std::string> itemTypes;
-      itemTypes.reserve(shortcuts.items.size());
-      for (const auto& item : shortcuts.items) {
-        itemTypes.push_back(item.type);
-      }
-
-      std::vector<ListEditorOption> suggestedOptions;
-      suggestedOptions.reserve(shortcuts.suggestedOptions.size());
-      for (const auto& opt : shortcuts.suggestedOptions) {
-        suggestedOptions.push_back(ListEditorOption{.value = opt.value, .label = opt.label});
-      }
-
-      auto listEditor = std::make_unique<ListEditor>();
-      listEditor->setScale(scale);
-      listEditor->setMaxItems(shortcuts.maxItems);
-      listEditor->setAddPlaceholder(i18n::tr("settings.controls.list.add-entry-placeholder"));
-      listEditor->setSuggestedOptions(std::move(suggestedOptions));
-      listEditor->setItems(std::move(itemTypes));
-      listEditor->setOnAddRequested([setOverride = ctx.setOverride, items = shortcuts.items,
-                                     path = entry.path](std::string value) mutable {
-        if (value.empty() || std::ranges::contains(items, value, &ShortcutConfig::type)) {
-          return;
-        }
-        items.push_back(ShortcutConfig{std::move(value)});
-        setOverride(path, items);
-      });
-      listEditor->setOnRemoveRequested([setOverride = ctx.setOverride, items = shortcuts.items,
-                                        path = entry.path](std::size_t index) mutable {
-        if (index >= items.size()) {
-          return;
-        }
-        items.erase(items.begin() + static_cast<std::ptrdiff_t>(index));
-        setOverride(path, items);
-      });
-      listEditor->setOnMoveRequested([setOverride = ctx.setOverride, items = shortcuts.items,
-                                      path = entry.path](std::size_t from, std::size_t to) mutable {
-        if (from >= items.size() || to >= items.size() || from == to) {
-          return;
-        }
-        std::swap(items[from], items[to]);
-        setOverride(path, items);
-      });
-      block->addChild(std::move(listEditor));
-
-      section.addChild(std::move(block));
-    };
-
     const auto makeSessionActionsInlineBlock = [&](Flex& section, const SettingEntry& entry,
                                                    const SessionPanelActionsSetting& sa) {
       const bool overridden = (ctx.configService != nullptr && ctx.configService->hasEffectiveOverride(entry.path));
@@ -822,7 +776,19 @@ namespace settings {
         req();
       };
 
-      const float iconBtnH = Style::controlHeight * scale;
+      auto listColumn = ui::column({
+          .align = FlexAlign::Stretch,
+          .gap = Style::spaceXs * scale,
+          .fillWidth = true,
+      });
+      auto* listColumnPtr = listColumn.get();
+
+      Box* dropIndicatorPtr = nullptr;
+      listColumn->addChild(makeListDropIndicator(scale, &dropIndicatorPtr));
+
+      auto itemNodes = std::make_shared<std::vector<Flex*>>();
+      itemNodes->reserve(state->size());
+      const std::string dragTooltip = i18n::tr("settings.controls.list.drag");
 
       for (std::size_t idx = 0; idx < state->size(); ++idx) {
         auto row = ui::row({
@@ -831,6 +797,16 @@ namespace settings {
             .gap = Style::spaceSm * scale,
             .minHeight = Style::controlHeightSm * scale,
         });
+        auto* rowPtr = row.get();
+
+        row->addChild(makeListDragHandle(
+            *rowPtr, *listColumnPtr, *dropIndicatorPtr, itemNodes, idx, scale, dragTooltip,
+            [state, commit](std::size_t from, std::size_t insertion) {
+              if (moveListItem(*state, from, insertion)) {
+                commit();
+              }
+            }
+        ));
 
         Label* summaryLabel = nullptr;
         auto summary = ui::label({
@@ -845,47 +821,6 @@ namespace settings {
         }
         row->addChild(std::move(summary));
 
-        auto reorder = ui::row({.align = FlexAlign::Center, .gap = Style::spaceXs * scale});
-
-        auto upBtn = ui::button({
-            .glyph = "chevron-up",
-            .glyphSize = Style::fontSizeBody * scale,
-            .enabled = idx > 0,
-            .variant = ButtonVariant::Ghost,
-            .minWidth = Style::controlHeightSm * scale,
-            .minHeight = iconBtnH,
-            .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusMd(scale),
-            .onClick = [state, rowIndex = idx, commit] {
-              if (rowIndex == 0 || rowIndex >= state->size()) {
-                return;
-              }
-              std::swap((*state)[rowIndex - 1], (*state)[rowIndex]);
-              commit();
-            },
-        });
-        reorder->addChild(std::move(upBtn));
-
-        auto downBtn = ui::button({
-            .glyph = "chevron-down",
-            .glyphSize = Style::fontSizeBody * scale,
-            .enabled = idx + 1 < state->size(),
-            .variant = ButtonVariant::Ghost,
-            .minWidth = Style::controlHeightSm * scale,
-            .minHeight = iconBtnH,
-            .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusMd(scale),
-            .onClick = [state, rowIndex = idx, commit] {
-              if (rowIndex + 1 >= state->size()) {
-                return;
-              }
-              std::swap((*state)[rowIndex + 1], (*state)[rowIndex]);
-              commit();
-            },
-        });
-        reorder->addChild(std::move(downBtn));
-        row->addChild(std::move(reorder));
-
         auto entrySettings = ui::button({
             .glyph = "settings",
             .glyphSize = Style::fontSizeCaption * scale,
@@ -893,7 +828,8 @@ namespace settings {
             .minWidth = Style::controlHeightSm * scale,
             .minHeight = Style::controlHeightSm * scale,
             .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusSm(scale),
+            .styleRadius = Style::radiusSm,
+            .styleRadiusScale = scale,
             .onClick = [openEntry = ctx.openSessionActionEntryEditor, rowIndex = idx] {
               if (openEntry) {
                 openEntry(rowIndex);
@@ -916,8 +852,11 @@ namespace settings {
         });
         row->addChild(std::move(enabledToggle));
 
-        block->addChild(std::move(row));
+        itemNodes->push_back(rowPtr);
+        listColumn->addChild(std::move(row));
       }
+
+      block->addChild(std::move(listColumn));
 
       auto addBtn = ui::button({
           .text = i18n::tr("settings.session-actions.add"),
@@ -928,7 +867,8 @@ namespace settings {
           .minHeight = Style::controlHeight * scale,
           .paddingV = Style::spaceSm * scale,
           .paddingH = Style::spaceMd * scale,
-          .radius = Style::scaledRadiusMd(scale),
+          .styleRadius = Style::radiusMd,
+          .styleRadiusScale = scale,
           .onClick = [state, commit] {
             state->push_back(
                 SessionPanelActionConfig{
@@ -958,7 +898,20 @@ namespace settings {
         req();
       };
 
-      const float iconBtnH = Style::controlHeight * scale;
+      auto listColumn = ui::column({
+          .align = FlexAlign::Stretch,
+          .gap = Style::spaceXs * scale,
+          .fillWidth = true,
+      });
+      auto* listColumnPtr = listColumn.get();
+
+      Box* dropIndicatorPtr = nullptr;
+      listColumn->addChild(makeListDropIndicator(scale, &dropIndicatorPtr));
+
+      auto itemNodes = std::make_shared<std::vector<Flex*>>();
+      itemNodes->reserve(state->size());
+      const std::string dragTooltip = i18n::tr("settings.controls.list.drag");
+
       for (std::size_t idx = 0; idx < state->size(); ++idx) {
         auto row = ui::row({
             .align = FlexAlign::Center,
@@ -966,6 +919,16 @@ namespace settings {
             .gap = Style::spaceSm * scale,
             .minHeight = Style::controlHeightSm * scale,
         });
+        auto* rowPtr = row.get();
+
+        row->addChild(makeListDragHandle(
+            *rowPtr, *listColumnPtr, *dropIndicatorPtr, itemNodes, idx, scale, dragTooltip,
+            [state, commit](std::size_t from, std::size_t insertion) {
+              if (moveListItem(*state, from, insertion)) {
+                commit();
+              }
+            }
+        ));
 
         auto summary = ui::label({
             .text = idleBehaviorRowSummary((*state)[idx]),
@@ -975,47 +938,6 @@ namespace settings {
         });
         row->addChild(std::move(summary));
 
-        auto reorder = ui::row({.align = FlexAlign::Center, .gap = Style::spaceXs * scale});
-
-        auto upBtn = ui::button({
-            .glyph = "chevron-up",
-            .glyphSize = Style::fontSizeBody * scale,
-            .enabled = idx > 0,
-            .variant = ButtonVariant::Ghost,
-            .minWidth = Style::controlHeightSm * scale,
-            .minHeight = iconBtnH,
-            .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusMd(scale),
-            .onClick = [state, rowIndex = idx, commit] {
-              if (rowIndex == 0 || rowIndex >= state->size()) {
-                return;
-              }
-              std::swap((*state)[rowIndex - 1], (*state)[rowIndex]);
-              commit();
-            },
-        });
-        reorder->addChild(std::move(upBtn));
-
-        auto downBtn = ui::button({
-            .glyph = "chevron-down",
-            .glyphSize = Style::fontSizeBody * scale,
-            .enabled = idx + 1 < state->size(),
-            .variant = ButtonVariant::Ghost,
-            .minWidth = Style::controlHeightSm * scale,
-            .minHeight = iconBtnH,
-            .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusMd(scale),
-            .onClick = [state, rowIndex = idx, commit] {
-              if (rowIndex + 1 >= state->size()) {
-                return;
-              }
-              std::swap((*state)[rowIndex + 1], (*state)[rowIndex]);
-              commit();
-            },
-        });
-        reorder->addChild(std::move(downBtn));
-        row->addChild(std::move(reorder));
-
         auto entrySettings = ui::button({
             .glyph = "settings",
             .glyphSize = Style::fontSizeCaption * scale,
@@ -1023,7 +945,8 @@ namespace settings {
             .minWidth = Style::controlHeightSm * scale,
             .minHeight = Style::controlHeightSm * scale,
             .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusSm(scale),
+            .styleRadius = Style::radiusSm,
+            .styleRadiusScale = scale,
             .onClick = [openEntry = ctx.openIdleBehaviorEntryEditor, rowIndex = idx] {
               if (openEntry) {
                 openEntry(rowIndex);
@@ -1046,8 +969,11 @@ namespace settings {
         });
         row->addChild(std::move(enabledToggle));
 
-        block->addChild(std::move(row));
+        itemNodes->push_back(rowPtr);
+        listColumn->addChild(std::move(row));
       }
+
+      block->addChild(std::move(listColumn));
 
       auto addBtn = ui::button({
           .text = i18n::tr("settings.idle.behavior.add"),
@@ -1058,7 +984,8 @@ namespace settings {
           .minHeight = Style::controlHeight * scale,
           .paddingV = Style::spaceSm * scale,
           .paddingH = Style::spaceMd * scale,
-          .radius = Style::scaledRadiusMd(scale),
+          .styleRadius = Style::radiusMd,
+          .styleRadiusScale = scale,
           .onClick = [openCreate = ctx.openIdleBehaviorCreateEditor] {
             if (openCreate) {
               openCreate();
@@ -1107,7 +1034,8 @@ namespace settings {
             .minWidth = Style::controlHeightSm * scale,
             .minHeight = Style::controlHeightSm * scale,
             .padding = Style::spaceXs * scale,
-            .radius = Style::scaledRadiusSm(scale),
+            .styleRadius = Style::radiusSm,
+            .styleRadiusScale = scale,
             .onClick = [openEntry = ctx.openNotificationFilterEntryEditor, rowIndex = idx] {
               if (openEntry) {
                 openEntry(rowIndex);
@@ -1143,7 +1071,8 @@ namespace settings {
           .minHeight = Style::controlHeight * scale,
           .paddingV = Style::spaceSm * scale,
           .paddingH = Style::spaceMd * scale,
-          .radius = Style::scaledRadiusMd(scale),
+          .styleRadius = Style::radiusMd,
+          .styleRadiusScale = scale,
           .onClick = [openCreate = ctx.openNotificationFilterCreateEditor] {
             if (openCreate) {
               openCreate();
@@ -1166,7 +1095,7 @@ namespace settings {
             } else if constexpr (std::is_same_v<T, SliderSetting>) {
               return makeSlider(
                   control.value, control.minValue, control.maxValue, control.step, entry.path, control.integerValue,
-                  control.valueSuffix, control.linkedCommit, control.invertSlot, control.invertEnabled
+                  control.valueSuffix, control.linkedCommit, control.invertSlot, control.invertEnabled, control.preview
               );
             } else if constexpr (std::is_same_v<T, RangeSliderSetting>) {
               return makeRangeSlider(control, entry.path);
@@ -1184,6 +1113,8 @@ namespace settings {
               return makeOptionalStepper(control, entry.path);
             } else if constexpr (std::is_same_v<T, StepperSetting>) {
               return makeStepper(control, entry.path);
+            } else if constexpr (std::is_same_v<T, LengthSetting>) {
+              return factory.makeLength(control, entry.path);
             } else if constexpr (std::is_same_v<T, SearchPickerSetting>) {
               return nullptr;
             } else if constexpr (std::is_same_v<T, MultiSelectSetting>) {
@@ -1213,7 +1144,8 @@ namespace settings {
                     .minHeight = Style::controlHeight * scale,
                     .paddingV = Style::spaceSm * scale,
                     .paddingH = Style::spaceMd * scale,
-                    .radius = Style::scaledRadiusMd(scale),
+                    .styleRadius = Style::radiusMd,
+                    .styleRadiusScale = scale,
                     .onClick = control.action,
                 });
               }
@@ -1226,7 +1158,8 @@ namespace settings {
                   .minHeight = Style::controlHeight * scale,
                   .paddingV = Style::spaceSm * scale,
                   .paddingH = Style::spaceMd * scale,
-                  .radius = Style::scaledRadiusMd(scale),
+                  .styleRadius = Style::radiusMd,
+                  .styleRadiusScale = scale,
                   .onClick = control.action,
               });
             } else if constexpr (std::is_same_v<T, ColorSpecPickerSetting>) {
@@ -1344,7 +1277,8 @@ namespace settings {
                 .text = groupLabel(group),
                 .fontSize = Style::fontSizeCaption * scale,
                 .variant = expandedGroups->contains(group) ? ButtonVariant::Primary : ButtonVariant::Default,
-                .radius = Style::scaledRadiusMd(scale),
+                .styleRadius = Style::radiusMd,
+                .styleRadiusScale = scale,
             })
         );
         pillByGroup.emplace(group, pill);
@@ -1435,12 +1369,12 @@ namespace settings {
           if (isFirstBarWidgetListPath(entry.path)) {
             addBarWidgetLaneEditor(*activeGroupBody, entry, barWidgetEditorCtx);
           } else if (!isBarWidgetListPath(entry.path)) {
-            makeListBlock(*activeGroupBody, entry, *list);
+            factory.makeListBlock(*activeGroupBody, entry, *list);
           }
         } else if (const auto* map = std::get_if<StringMapSetting>(&entry.control)) {
           factory.makeStringMapBlock(*activeGroupBody, entry, *map);
         } else if (const auto* shortcuts = std::get_if<ShortcutListSetting>(&entry.control)) {
-          makeShortcutListBlock(*activeGroupBody, entry, *shortcuts);
+          factory.makeShortcutListBlock(*activeGroupBody, entry, *shortcuts);
         } else if (const auto* keybindList = std::get_if<KeybindListSetting>(&entry.control)) {
           if (activeKeybindRow == nullptr || activeKeybindRowCount >= kKeybindsPerRow) {
             auto row = ui::row({
@@ -1488,7 +1422,8 @@ namespace settings {
            .gap = Style::spaceSm * scale,
            .padding = (Style::spaceLg * 2.0F) * scale,
            .fill = colorSpecFromRole(ColorRole::SurfaceContainerLow),
-           .radius = Style::scaledRadiusMd(scale),
+           .styleRadius = Style::radiusMd,
+           .styleRadiusScale = scale,
            .border = colorSpecFromRole(ColorRole::OutlineVariant),
            .minWidth = 360.0F * scale,
            .minHeight = 160.0F * scale,

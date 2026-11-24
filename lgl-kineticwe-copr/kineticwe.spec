@@ -536,6 +536,11 @@ echo
 %files -n kineticwe-noctalia
 %license shell/noctalia/LICENSE
 %{_bindir}/noctalia-kwe
+# Lock-screen authentication helper (upstream's PAM helper, rebranded).
+%dir %{_libexecdir}/kineticwe/
+%{_libexecdir}/kineticwe/kineticwe-pam-helper
+# assets/ includes the systemd user-unit asset (noctalia.service); the session
+# runs kineticwe-shell.service instead, so it ships unenabled.
 %{_datadir}/noctalia-kwe/
 %{_datadir}/applications/dev.kineticwe.Noctalia.desktop
 %{_datadir}/applications/dev.kineticwe.Noctalia.Annotator.desktop

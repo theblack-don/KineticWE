@@ -1,10 +1,10 @@
 #include "default_apps_page.h"
 
 #include "core/log.h"
-#include "core/process/process.h"
 #include "i18n/i18n.h"
 #include "system/desktop_entry.h"
 #include "system/desktop_entry_launch.h"
+#include "system/process.h"
 #include "system/terminal_launch.h"
 #include "ui/builders.h"
 #include "ui/controls/button.h"

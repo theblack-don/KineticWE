@@ -1,11 +1,11 @@
 #include "system/weather_service.h"
 
 #include "config/config_service.h"
+#include "core/application_identity.h"
 #include "core/log.h"
 #include "i18n/i18n.h"
 #include "net/http_client.h"
 #include "time/time_format.h"
-#include "util/file_utils.h"
 
 #include <algorithm>
 #include <cctype>
@@ -695,10 +695,10 @@ std::filesystem::path WeatherService::transportCacheDir() { return std::filesyst
 
 std::filesystem::path WeatherService::stateCacheFilePath() {
   if (const char* xdg = std::getenv("XDG_CACHE_HOME"); xdg != nullptr && xdg[0] != '\0') {
-    return std::filesystem::path(xdg) / FileUtils::kAppDirName / "weather.json";
+    return std::filesystem::path(xdg) / applicationIdentity().name / "weather.json";
   }
   if (const char* home = std::getenv("HOME"); home != nullptr && home[0] != '\0') {
-    return std::filesystem::path(home) / ".cache" / FileUtils::kAppDirName / "weather.json";
+    return std::filesystem::path(home) / ".cache" / applicationIdentity().name / "weather.json";
   }
   return std::filesystem::path("/tmp") / "noctalia-weather-cache.json";
 }

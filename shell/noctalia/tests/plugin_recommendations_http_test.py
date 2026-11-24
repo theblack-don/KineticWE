@@ -25,8 +25,8 @@ def run(binary):
         root = Path(directory)
         api = int(subprocess.check_output([str(Path(binary).resolve()), "--api"]))
         names = ["CasePlugin", "Hidden", "Lost", "Conflict", "Limited", "Unavailable", "Proxy", "Uninstalled", "Deprecated", "Delisted"]
-        state_root = root / "state/noctalia"
-        config_dir = root / "config/noctalia"
+        state_root = root / "state/noctalia-kwe"
+        config_dir = root / "config/noctalia-kwe"
         config_dir.mkdir(parents=True)
         (config_dir / "config.toml").write_text("[shell]\ntelemetry_enabled = false\nsetup_wizard_enabled = false\n")
         for source in ["official", "community"]:
@@ -159,7 +159,7 @@ def run(binary):
         env = dict(os.environ)
         for name in ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy", "NO_PROXY", "no_proxy"]:
             env.pop(name, None)
-        env.update(NOCTALIA_RECOMMENDATION_FIXTURE="1", NOCTALIA_CONFIG_HOME=str(root / "config"), NOCTALIA_STATE_HOME=str(root / "state"), NOCTALIA_DATA_HOME=str(root / "data"), HTTPS_PROXY=f"http://127.0.0.1:{server.server_port}", NOCTALIA_ASSETS_DIR=str(Path("assets").resolve()))
+        env.update(NOCTALIA_RECOMMENDATION_FIXTURE="1", NOCTALIA_CONFIG_HOME=str(root / "config"), NOCTALIA_STATE_HOME=str(root / "state"), NOCTALIA_DATA_HOME=str(root / "data"), HTTPS_PROXY=f"http://127.0.0.1:{server.server_port}", NOCTALIA_APP_ASSETS_DIR=str(Path("assets").resolve()))
         try:
             subprocess.run([str(Path(binary).resolve()), "--http", str(cert)], env=env, check=True, timeout=60)
             if violations:

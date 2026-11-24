@@ -6,6 +6,7 @@
 #include "shell/switcher/window_switcher_style.h"
 #include "system/window_state.h"
 #include "ui/palette.h"
+#include "ui/signal.h"
 
 #include <cstdint>
 #include <functional>
@@ -13,7 +14,6 @@
 #include <optional>
 #include <string>
 
-class AsyncTextureCache;
 class Box;
 class Button;
 class Flex;
@@ -21,6 +21,14 @@ class Glyph;
 class Image;
 class Label;
 class Renderer;
+
+// Physical-pixel bounds requested for a window preview capture.
+struct ThumbnailTarget {
+  int width = 0;
+  int height = 0;
+
+  bool operator==(const ThumbnailTarget&) const = default;
+};
 
 struct WindowSwitcherEntry {
   // Switcher bookkeeping only; never pass this process-local key to compositor APIs.
@@ -34,18 +42,21 @@ struct WindowSwitcherEntry {
   std::uintptr_t closeHandle = 0;
   std::uintptr_t captureHandle = 0;
   std::shared_ptr<const ScreencopyImage> thumbnail;
+  int thumbnailTargetWidth = 0;
   std::optional<WindowMinimizeState> minimizeState;
 };
 
 // Preview card shared by window-switcher presentation styles.
 class WindowSwitcherTile : public InputArea {
 public:
-  WindowSwitcherTile(float contentScale, AsyncTextureCache* asyncTextures);
+  explicit WindowSwitcherTile(float contentScale);
 
   void setCardSize(float width, float height);
   void setShadowStyle(const RoundedRectStyle& style);
   void setShowCaption(bool show);
+  void setIntegratedCaption(bool integrated);
   void setShowAppIcon(bool show);
+  void setShowPreview(bool show);
   void setAppIconColorizeTint(std::optional<ColorSpec> tint) { m_appIconColorizeTint = tint; }
   void setOnInvalidate(std::function<void()> callback) { m_onInvalidate = std::move(callback); }
   void setOnActivate(std::function<void()> callback) { m_onActivate = std::move(callback); }
@@ -60,6 +71,7 @@ private:
   bool refreshIcon(Renderer& renderer);
   void setPointerHovered(bool hovered);
   void applyVisualState();
+  void applyPreviewRadius();
   void layoutContent(Renderer& renderer);
 
 protected:
@@ -68,6 +80,7 @@ protected:
   float m_contentScale = 1.0F;
   float m_cardWidth = 0.0F;
   float m_cardHeight = 0.0F;
+  Signal<>::ScopedConnection m_radiusConn;
 
   Box* m_shadow = nullptr;
   Box* m_frame = nullptr;
@@ -90,7 +103,9 @@ protected:
   bool m_showCaption = true;
   bool m_captionVisible = false;
   bool m_wideCaption = false;
+  bool m_integratedCaption = false;
   bool m_showAppIcon = true;
+  bool m_showPreview = true;
   WindowSwitcherHorizontalPlacement m_iconPlacement = WindowSwitcherHorizontalPlacement::Left;
   WindowSwitcherHorizontalPlacement m_closePlacement = WindowSwitcherHorizontalPlacement::Right;
   WindowSwitcherTileDepth m_depth = WindowSwitcherTileDepth::Far;
@@ -98,7 +113,6 @@ protected:
   std::string m_iconPath;
   int m_iconTargetSize = 0;
   std::shared_ptr<const ScreencopyImage> m_thumbnailImage;
-  AsyncTextureCache* m_asyncTextures = nullptr;
   std::optional<ColorSpec> m_appIconColorizeTint;
   std::function<void()> m_onInvalidate;
   std::function<void()> m_onActivate;

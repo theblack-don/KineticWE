@@ -1,8 +1,10 @@
 #include "theme/community_palettes.h"
 
+#include "core/application_identity.h"
 #include "core/deferred_call.h"
 #include "core/log.h"
 #include "net/http_client.h"
+#include "theme/fixed_palette_json.h"
 #include "util/file_utils.h"
 #include "util/string_utils.h"
 
@@ -10,6 +12,7 @@
 #include <array>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
@@ -23,6 +26,7 @@ namespace noctalia::theme {
   namespace {
 
     constexpr Logger kLog("community_palettes");
+    // Requests name the newest palette format this build reads; the API converts newer palettes down for older builds.
     constexpr std::string_view kCatalogUrl = "https://api.noctalia.dev/palettes";
     constexpr std::string_view kPaletteUrlBase = "https://api.noctalia.dev/palette";
 
@@ -100,6 +104,7 @@ namespace noctalia::theme {
           AvailablePalette palette;
           palette.name = paletteNameFromJson(item);
           palette.md5 = item.is_object() ? stringField(item, "md5") : std::string{};
+          palette.base = item.is_object() ? StringUtils::trim(stringField(item, "base")) : std::string{};
           palette.preview.dark = palettePreviewFromJson(item, "dark");
           palette.preview.light = palettePreviewFromJson(item, "light");
           if (!palette.name.empty()) {
@@ -127,21 +132,23 @@ namespace noctalia::theme {
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
 
-    m_httpClient.download(kCatalogUrl, path, [this, generation, path](bool success) {
-      if (generation != m_generation) {
-        return;
-      }
-      if (!success) {
-        kLog.warn("failed to refresh community palette catalog; using cached metadata when available");
-        return;
-      }
-      if (parseCatalogFile(path).empty()) {
-        kLog.warn("community palette catalog downloaded but contained no palettes");
-      }
-      if (m_readyCallback) {
-        DeferredCall::callLater([callback = m_readyCallback] { callback(); });
-      }
-    });
+    m_httpClient.download(
+        std::format("{}?version={}", kCatalogUrl, kPaletteFormatVersion), path, [this, generation, path](bool success) {
+          if (generation != m_generation) {
+            return;
+          }
+          if (!success) {
+            kLog.warn("failed to refresh community palette catalog; using cached metadata when available");
+            return;
+          }
+          if (parseCatalogFile(path).empty()) {
+            kLog.warn("community palette catalog downloaded but contained no palettes");
+          }
+          if (m_readyCallback) {
+            DeferredCall::callLater([callback = m_readyCallback] { callback(); });
+          }
+        }
+    );
   }
 
   std::vector<AvailablePalette> availableCommunityPalettes() { return parseCatalogFile(catalogCachePath()); }
@@ -162,7 +169,7 @@ namespace noctalia::theme {
     if (!state.empty()) {
       return std::filesystem::path(state) / "community-palettes";
     }
-    return std::filesystem::path("/tmp") / FileUtils::kAppDirName / "community-palettes";
+    return std::filesystem::path("/tmp") / applicationIdentity().name / "community-palettes";
   }
 
   std::filesystem::path communityPaletteCachePath(std::string_view name) {
@@ -170,7 +177,7 @@ namespace noctalia::theme {
   }
 
   std::string communityPaletteDownloadUrl(std::string_view name) {
-    return std::string(kPaletteUrlBase) + "/" + StringUtils::urlEncode(name);
+    return std::format("{}/{}?version={}", kPaletteUrlBase, StringUtils::urlEncode(name), kPaletteFormatVersion);
   }
 
 } // namespace noctalia::theme

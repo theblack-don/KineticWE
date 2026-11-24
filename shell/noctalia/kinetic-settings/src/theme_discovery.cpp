@@ -1,8 +1,8 @@
 #include "theme_discovery.h"
 
-#include "core/process/process.h"
 #include "system/desktop_entry.h"
 #include "system/desktop_entry_launch.h"
+#include "system/process.h"
 #include "util/file_utils.h"
 #include "util/string_utils.h"
 

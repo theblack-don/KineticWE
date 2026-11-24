@@ -70,6 +70,8 @@ clean_local_build() {
           ~/.local/bin/kwindowprop \
           ~/.local/bin/noctalia-kwe \
           ~/.local/bin/start-kineticwe
+    rm -rf ~/.local/libexec/kineticwe \
+           ~/.local/libexec/noctalia
     rm -rf ~/.local/share/kwin-wayland \
            ~/.local/share/knsrcfiles \
            ~/.local/share/qlogging-categories6 \

@@ -664,6 +664,11 @@ package_kineticwe-noctalia() {
     cd "$srcdir"
     meson install -C shell-build --no-rebuild --destdir "$pkgdir"
 
+    # The lock screen cannot authenticate without the PAM helper. arch-meson
+    # sets libexecdir=lib, so it lands in /usr/lib/kineticwe.
+    [[ -x "$pkgdir/usr/lib/kineticwe/kineticwe-pam-helper" ]] \
+        || error "kineticwe-pam-helper was not installed by the shell build"
+
     install -Dm644 "$srcdir/$_sourcebase/shell/noctalia/LICENSE" \
         "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

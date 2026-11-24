@@ -1,8 +1,8 @@
 #include "ipc/ipc_service.h"
 
 #include "cli/help.h"
+#include "core/application_identity.h"
 #include "core/log.h"
-#include "util/file_utils.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -24,7 +24,7 @@ namespace {
   constexpr int kRecvTimeoutMs = 100;
   constexpr char kCallerCwdSeparator = '\x1e';
 
-  [[nodiscard]] std::optional<std::string> parseCallerCwdPrefix(std::string& line) {
+  std::optional<std::string> parseCallerCwdPrefix(std::string& line) {
     const auto separator = line.find(kCallerCwdSeparator);
     if (separator == std::string::npos) {
       return std::nullopt;
@@ -129,8 +129,9 @@ void IpcService::bindCycle(const noctalia::cli::Command& command, Handler handle
   bind(command, std::move(handler), options);
   const auto it =
       std::ranges::find_if(m_handlers, [&command](const auto& entry) { return entry.first == command.name; });
-  if (it != m_handlers.end())
+  if (it != m_handlers.end()) {
     it->second.cycles = true;
+  }
 }
 
 bool IpcService::handlerCycles(std::string_view command) const noexcept {
@@ -322,5 +323,5 @@ std::string IpcService::resolveSocketPath() {
   if (display == nullptr || display[0] == '\0') {
     display = "wayland-0";
   }
-  return std::string(runtime) + "/" + std::string(FileUtils::kAppDirName) + "-" + display + ".sock";
+  return std::string(runtime) + "/" + std::string(applicationIdentity().name) + "-" + display + ".sock";
 }

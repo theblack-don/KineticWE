@@ -2,6 +2,7 @@
 
 #include "core/deferred_call.h"
 #include "core/log.h"
+#include "notification/notification_display_name.h"
 #include "notification/notification_filter.h"
 #include "notification/notification_history_store.h"
 #include "pipewire/sound_player.h"
@@ -288,6 +289,17 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
     actions.resize(kMaxNotificationActions * 2);
   }
 
+  // Apps that send no icon may still name their desktop entry; use its Icon= as the app icon.
+  if ((!icon.has_value() || icon->empty())
+      && !imageData.has_value()
+      && desktopEntry.has_value()
+      && !desktopEntry->empty()) {
+    if (const auto entry = findNotificationDesktopEntry(*desktopEntry); entry.has_value() && !entry->icon.empty()) {
+      icon = entry->icon;
+      request.iconIsAppIcon = true;
+    }
+  }
+
   const auto now = Clock::now();
   const auto wallNow = WallClock::now();
 
@@ -340,6 +352,7 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
            || n.dndPolicy != dndPolicy
            || n.actions != actions
            || n.icon != icon
+           || n.iconIsAppIcon != request.iconIsAppIcon
            || n.imageData != imageData
            || n.category != category
            || n.desktopEntry != desktopEntry);
@@ -358,6 +371,7 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
       n.urgency = urgency;
       n.actions = std::move(actions);
       n.icon = std::move(icon);
+      n.iconIsAppIcon = request.iconIsAppIcon;
       n.imageData = std::move(imageData);
       n.category = std::move(category);
       n.desktopEntry = std::move(desktopEntry);
@@ -365,6 +379,11 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
       n.expiryTime = scheduleExpiry(now, timeout);
       n.receivedWallClock = wallNow;
       n.expiryWallClock = scheduleExpiryWall(wallNow, timeout);
+      if (origin == NotificationOrigin::Internal && request.actionHandler) {
+        m_internalActionHandlers[n.id] = std::move(request.actionHandler);
+      } else {
+        m_internalActionHandlers.erase(n.id);
+      }
 
       logNotification(n, "updated");
       if (dispatch.saveHistory) {
@@ -417,6 +436,7 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
           .urgency = urgency,
           .actions = std::move(actions),
           .icon = std::move(icon),
+          .iconIsAppIcon = request.iconIsAppIcon,
           .imageData = std::move(imageData),
           .category = std::move(category),
           .desktopEntry = std::move(desktopEntry),
@@ -427,6 +447,9 @@ uint32_t NotificationManager::addOrReplace(NotificationRequest request) {
       }
   );
   m_idToIndex.emplace(id, m_notifications.size() - 1);
+  if (origin == NotificationOrigin::Internal && request.actionHandler) {
+    m_internalActionHandlers.emplace(id, std::move(request.actionHandler));
+  }
 
   const auto& n = m_notifications.back();
   logNotification(n, "added");
@@ -495,10 +518,6 @@ uint32_t NotificationManager::addInternal(
   );
 }
 
-void NotificationManager::setInternalActionCallback(ActionInvokeCallback callback) {
-  m_internalActionCallback = std::move(callback);
-}
-
 void NotificationManager::setActionInvokeCallback(ActionInvokeCallback callback) {
   m_actionInvokeCallback = std::move(callback);
 }
@@ -525,7 +544,7 @@ const Notification* NotificationManager::findInvokable(uint32_t id) const {
 
 void NotificationManager::dismissAfterInvoke(uint32_t id) {
   if (m_idToIndex.contains(id)) {
-    (void)close(id, CloseReason::Dismissed);
+    close(id, CloseReason::Dismissed);
   } else if (const auto histIt = m_historyIndex.find(id); histIt != m_historyIndex.end()) {
     emitPendingDBusClose(id, CloseReason::Dismissed);
     m_history[histIt->second].notification.actions.clear();
@@ -557,8 +576,10 @@ bool NotificationManager::invokeAction(
 
   // Internal notifications have no D-Bus owner, so their actions are dispatched in-process instead.
   if (notification->origin == NotificationOrigin::Internal) {
-    if (m_internalActionCallback) {
-      m_internalActionCallback(id, actionKey, activationToken, notification->sender);
+    if (const auto it = m_internalActionHandlers.find(id); it != m_internalActionHandlers.end()) {
+      // Copy: the handler may add notifications and rehash the map.
+      const InternalNotificationActionHandler handler = it->second;
+      handler(actionKey, activationToken);
     }
   } else if (m_actionInvokeCallback) {
     m_actionInvokeCallback(id, actionKey, activationToken, notification->sender);
@@ -603,6 +624,7 @@ void NotificationManager::emitPendingDBusClose(uint32_t id, CloseReason reason) 
   }
   const std::string sender = std::move(it->second);
   m_pendingDBusClose.erase(it);
+  m_internalActionHandlers.erase(id);
   if (m_closeCallback) {
     m_closeCallback(id, reason, sender);
   }
@@ -667,6 +689,10 @@ bool NotificationManager::close(uint32_t id, CloseReason reason) {
   }
 
   const bool deferDBusClose = reason == CloseReason::Expired && notificationHasInvokableActions(closed);
+  // A deferred close stays invokable from history, so its handler must outlive the live notification.
+  if (!deferDBusClose || !m_historyIndex.contains(id)) {
+    m_internalActionHandlers.erase(id);
+  }
   if (deferDBusClose) {
     m_pendingDBusClose.emplace(id, closed.sender);
   } else if (m_closeCallback) {

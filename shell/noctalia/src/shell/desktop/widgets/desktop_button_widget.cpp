@@ -1,10 +1,10 @@
 #include "shell/desktop/widgets/desktop_button_widget.h"
 
 #include "core/log.h"
-#include "core/process/process.h"
 #include "core/ui_phase.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
+#include "system/process.h"
 #include "ui/builders.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -211,7 +211,7 @@ void DesktopButtonWidget::doLayout(Renderer& renderer) {
   m_button->setFontSize(Style::fontSizeBody * scale);
   m_button->setGlyphSize(Style::baseGlyphSize * scale);
   m_button->setPadding(Style::spaceSm * scale, Style::spaceMd * scale);
-  m_button->setRadius(Style::scaledRadiusMd(scale));
+  m_button->setStyleRadius(Style::radiusMd, scale);
 
   if (fillBox) {
     m_button->setMinWidth(innerW);

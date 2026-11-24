@@ -9,13 +9,16 @@
 #include "i18n/i18n.h"
 #include "render/core/renderer.h"
 #include "render/scene/input_area.h"
+#include "shell/app_icon_colorization_settings.h"
 #include "shell/panel/panel_manager.h"
+#include "system/desktop_entry.h"
 #include "ui/builders.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/image.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <memory>
@@ -46,7 +49,10 @@ namespace {
 } // namespace
 
 PolkitPanel::PolkitPanel(ConfigService* config, std::function<PolkitAgent*()> agentProvider)
-    : m_config(config), m_agentProvider(std::move(agentProvider)) {}
+    : m_config(config), m_agentProvider(std::move(agentProvider)) {
+  m_appIconColorizeConn =
+      shellAppIconColorizationChanged().connect([] { PanelManager::instance().requestUpdateOnly(); });
+}
 
 PanelPlacement PolkitPanel::panelPlacement() const noexcept {
   return m_config != nullptr ? m_config->config().shell.panel.polkitPlacement : PanelPlacement::Floating;
@@ -94,6 +100,15 @@ void PolkitPanel::create() {
       .out = &m_icon,
       .fit = ImageFit::Contain,
       .visible = false,
+      .configure = [this](Image& image) {
+        image.setAsyncReadyCallback([this, &image] {
+          if (image.loadState() == ImageLoadState::Failed && m_fallbackIcon != nullptr) {
+            image.setVisible(false);
+            m_fallbackIcon->setVisible(true);
+          }
+          PanelManager::instance().requestLayout();
+        });
+      },
   });
   iconContainer->addChild(std::move(iconImage));
 
@@ -315,9 +330,20 @@ void PolkitPanel::doUpdate(Renderer& renderer) {
     m_iconResolved = true;
     resolveIcon(renderer, request);
   }
+  m_icon->setAppIconColorization(
+      m_config != nullptr
+          ? effectiveShellAppIconColorizationTint(
+                m_config->config().shell, m_iconIsAppIcon && m_config->config().shell.polkitColorizeIcons
+            )
+          : std::nullopt
+  );
 }
 
 void PolkitPanel::resolveIcon(Renderer& renderer, const PolkitRequest& request) {
+  m_iconIsAppIcon = request.isInternal
+      || (!request.iconName.empty() && std::ranges::any_of(desktopEntries(), [&request](const DesktopEntry& entry) {
+                      return entry.icon == request.iconName;
+                    }));
   const float iconSize = scaled(48.0F);
   if (m_iconContainer != nullptr) {
     m_iconContainer->setSize(iconSize, iconSize);
@@ -325,20 +351,14 @@ void PolkitPanel::resolveIcon(Renderer& renderer, const PolkitRequest& request) 
 
   if (request.isInternal) {
     const auto logoPath = paths::assetPath("noctalia.svg");
-    m_fallbackIcon->setVisible(false);
-    m_icon->setSize(iconSize, iconSize);
-    m_icon->setSourceFile(renderer, logoPath.string(), static_cast<int>(std::round(iconSize)), true);
-    m_icon->setVisible(true);
+    loadIcon(renderer, logoPath.string(), iconSize);
     return;
   }
 
   if (!request.iconName.empty()) {
     const std::string& resolved = m_iconResolver.resolve(request.iconName, static_cast<int>(std::round(iconSize)));
     if (!resolved.empty()) {
-      m_fallbackIcon->setVisible(false);
-      m_icon->setSize(iconSize, iconSize);
-      m_icon->setSourceFile(renderer, resolved, static_cast<int>(std::round(iconSize)), true);
-      m_icon->setVisible(true);
+      loadIcon(renderer, resolved, iconSize);
       return;
     }
   }
@@ -346,6 +366,15 @@ void PolkitPanel::resolveIcon(Renderer& renderer, const PolkitRequest& request) 
   m_icon->clear(renderer);
   m_icon->setVisible(false);
   m_fallbackIcon->setVisible(true);
+}
+
+void PolkitPanel::loadIcon(Renderer& renderer, const std::string& path, float iconSize) {
+  m_icon->setSize(iconSize, iconSize);
+  m_icon->setSourceFile(renderer, path, {.targetSize = static_cast<int>(std::round(iconSize)), .mipmap = true});
+  // The shield fallback replaces the icon only once its decode has failed, not while it loads.
+  const bool failed = m_icon->loadState() == ImageLoadState::Failed;
+  m_icon->setVisible(!failed);
+  m_fallbackIcon->setVisible(failed);
 }
 
 void PolkitPanel::submit(std::string_view response) {

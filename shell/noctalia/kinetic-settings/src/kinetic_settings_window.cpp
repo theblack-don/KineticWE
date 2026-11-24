@@ -8,6 +8,7 @@
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
 #include "render/scene/node.h"
+#include "shell/wayland/shell_globals.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
@@ -2024,7 +2025,8 @@ void KineticSettingsWindow::updateKeyboardShortcutInhibit() {
   }
   const bool capturing = m_keybindsPage != nullptr && m_keybindsPage->isCapturing();
   if (capturing && m_shortcutInhibitor == nullptr) {
-    m_shortcutInhibitor = m_wayland->createKeyboardShortcutsInhibitor(m_surface->wlSurface());
+    m_shortcutInhibitor =
+        m_wayland->extension<ShellGlobals>().createKeyboardShortcutsInhibitor(m_surface->wlSurface());
   } else if (!capturing && m_shortcutInhibitor != nullptr) {
     zwp_keyboard_shortcuts_inhibitor_v1_destroy(m_shortcutInhibitor);
     m_shortcutInhibitor = nullptr;

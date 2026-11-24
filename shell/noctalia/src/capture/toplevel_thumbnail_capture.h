@@ -8,12 +8,12 @@
 #include <span>
 #include <string>
 
+class ImageCaptureGlobals;
 class WaylandConnection;
 struct ToplevelThumbnailCapturePending;
-struct ext_foreign_toplevel_handle_v1;
 
 namespace capture {
-  [[nodiscard]] std::optional<ScreencopyImage> makeToplevelThumbnail(
+  std::optional<ScreencopyImage> makeToplevelThumbnail(
       std::span<const std::uint8_t> pixels, int width, int height, std::uint32_t format, int maxWidth, int maxHeight,
       std::int32_t transform
   );
@@ -25,8 +25,8 @@ public:
   explicit ToplevelThumbnailCapture(WaylandConnection& wayland);
   ~ToplevelThumbnailCapture() override;
 
-  [[nodiscard]] bool available() const noexcept override;
-  [[nodiscard]] bool busy() const noexcept override { return m_pending != nullptr; }
+  bool available() const noexcept override;
+  bool busy() const noexcept override { return m_pending != nullptr; }
   void capture(const ToplevelCaptureSource& source, int maxWidth, int maxHeight, CompletionCallback onComplete)
       override;
   void cancelInFlight() override;
@@ -37,6 +37,7 @@ private:
   void finish(ScreencopyImage image);
 
   WaylandConnection& m_wayland;
+  ImageCaptureGlobals& m_imageCapture;
   std::unique_ptr<ToplevelThumbnailCapturePending> m_pending;
   CompletionCallback m_onComplete;
   Timer m_timeout;

@@ -2,15 +2,15 @@
 
 #include "config/config_service.h"
 #include "core/log.h"
-#include "core/process/process.h"
 #include "font_discovery.h"
 #include "i18n/i18n.h"
+#include "shell/controls/search_picker.h"
+#include "system/process.h"
 #include "ui/builders.h"
 #include "ui/controls/button.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/glyph.h"
 #include "ui/controls/label.h"
-#include "ui/controls/search_picker.h"
 #include "ui/controls/stepper.h"
 #include "ui/palette.h"
 #include "ui/style.h"
@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -61,6 +62,13 @@ namespace {
       "No installed font families were found. Install fontconfig or use Refresh font list.";
   constexpr std::string_view kAliasSample = "The quick brown fox 0123456789";
   constexpr std::string_view kInterfaceSample = "The quick brown fox jumps over the lazy dog";
+
+  // Kinetic Settings presents accessibility.font_scale as pixels of the body text size.
+  int fontSizePxFromScale(float fontScale) {
+    return std::clamp(static_cast<int>(std::lround(fontScale * Style::fontSizeBody)), kMinFontSize, kMaxFontSize);
+  }
+
+  float fontSizeScaleFromPx(int px) { return static_cast<float>(px) / Style::fontSizeBody; }
 
   // The generic fontconfig families this page manages. keyPath is the stable
   // reset/override token; the title is only the visible row label.
@@ -437,7 +445,7 @@ int FontsPage::fontSizeValue() const {
   if (m_pendingFontSize.has_value()) {
     return *m_pendingFontSize;
   }
-  return std::clamp(static_cast<int>(m_config.config().shell.fontSize), kMinFontSize, kMaxFontSize);
+  return fontSizePxFromScale(m_config.config().accessibility.fontScale);
 }
 
 bool FontsPage::fontSizeOverridden() const {
@@ -495,7 +503,7 @@ void FontsPage::stageInterface(std::string value) {
 
 void FontsPage::stageFontSize(int value) {
   const int clamped = std::clamp(value, kMinFontSize, kMaxFontSize);
-  const int fileValue = std::clamp(static_cast<int>(m_config.config().shell.fontSize), kMinFontSize, kMaxFontSize);
+  const int fileValue = fontSizePxFromScale(m_config.config().accessibility.fontScale);
   if (clamped == fileValue) {
     m_pendingFontSize.reset();
   } else {
@@ -664,7 +672,7 @@ bool FontsPage::applyAll() {
     return true;
   }
 
-  // Both shell values go in one commit so a single reload applies the pair.
+  // The interface family and size go in one commit so a single reload applies the pair.
   std::vector<std::pair<std::vector<std::string>, ConfigOverrideValue>> overrides;
   if (m_pendingInterface.has_value()) {
     // Persist an explicit sans-serif override: the custom family may come
@@ -675,7 +683,8 @@ bool FontsPage::applyAll() {
   }
   if (m_pendingFontSize.has_value()) {
     overrides.emplace_back(
-        std::vector<std::string>{"shell", "font_size"}, static_cast<std::int64_t>(*m_pendingFontSize)
+        std::vector<std::string>{"accessibility", "font_scale"},
+        static_cast<double>(fontSizeScaleFromPx(*m_pendingFontSize))
     );
   }
 
@@ -821,8 +830,7 @@ FontsPage::buildInterfaceRow(float scale, std::string_view armedResetKey, const 
   const std::string family = interfaceFamily();
   // The renderer already applies the saved font scale globally; scale the
   // preview from the saved size so a staged change previews its real size.
-  const int appliedFontSize =
-      std::clamp(static_cast<int>(m_config.config().shell.fontSize), kMinFontSize, kMaxFontSize);
+  const int appliedFontSize = fontSizePxFromScale(m_config.config().accessibility.fontScale);
   const float previewFontScale = static_cast<float>(fontSizeValue()) / static_cast<float>(appliedFontSize);
 
   auto copy = ui::column({.align = FlexAlign::Start, .gap = Style::spaceXs * scale, .flexGrow = 1.0F});

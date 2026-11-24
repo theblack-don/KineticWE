@@ -2,11 +2,11 @@
 
 #include "config/config_service.h"
 #include "core/log.h"
-#include "core/process/process.h"
 #include "dbus/session_bus.h"
 #include "keybinds_kwe.h"
 #include "system/desktop_entry.h"
 #include "system/desktop_entry_launch.h"
+#include "system/process.h"
 
 #include <sdbus-c++/sdbus-c++.h>
 

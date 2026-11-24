@@ -6,12 +6,12 @@
 #include "core/log.h"
 #include "i18n/i18n.h"
 #include "shell/panel/panel_manager.h"
+#include "shell/session/countdown_ring.h"
 #include "shell/session/session_action_meta.h"
 #include "shell/session/session_action_runner.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
 #include "ui/controls/button.h"
-#include "ui/controls/countdown_ring.h"
 #include "ui/controls/flex.h"
 #include "ui/controls/grid_view.h"
 #include "ui/palette.h"
@@ -30,7 +30,7 @@ namespace {
   constexpr Logger kLog("session");
   constexpr float kCountdownScrimAlpha = 0.58F;
 
-  [[nodiscard]] ButtonVariant buttonVariantFor(SessionActionButtonVariant variant) {
+  ButtonVariant buttonVariantFor(SessionActionButtonVariant variant) {
     switch (variant) {
     case SessionActionButtonVariant::Default:
       return ButtonVariant::Default;
@@ -198,7 +198,8 @@ Button* SessionPanel::createActionButton(const SessionPanelActionConfig& cfg, st
       .paddingV = Style::spaceMd * scale,
       .paddingH = Style::spaceMd * scale,
       .gap = Style::spaceSm * scale,
-      .radius = Style::scaledRadiusLg(scale),
+      .styleRadius = Style::radiusLg,
+      .styleRadiusScale = scale,
       .flexGrow = 1.0F,
       .onClick = [this, index] { armEntry(index); },
       .configure =
@@ -227,7 +228,8 @@ void SessionPanel::attachCountdownOverlay(Button& button, ActionCountdownOverlay
 
   auto scrim = ui::box({
       .out = &overlay.scrim,
-      .radius = Style::scaledRadiusLg(scale),
+      .styleRadius = Style::radiusLg,
+      .styleRadiusScale = scale,
       .participatesInLayout = false,
       .configure = [](Box& box) { box.setZIndex(0); },
   });
@@ -437,7 +439,7 @@ void SessionPanel::layoutCountdownOverlays(Renderer& renderer) {
   }
 }
 
-void SessionPanel::onFrameTick(float deltaMs) {
+void SessionPanel::onFrameTick(float deltaMs, Renderer& /*renderer*/) {
   if (!m_pendingCountdown.has_value()) {
     return;
   }

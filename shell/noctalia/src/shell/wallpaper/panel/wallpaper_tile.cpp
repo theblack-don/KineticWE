@@ -3,10 +3,11 @@
 #include "config/config_types.h"
 #include "cursor-shape-v1-client-protocol.h"
 #include "render/animation/animation_manager.h"
+#include "render/codecs/thumbnail_service.h"
 #include "render/core/renderer.h"
-#include "render/core/thumbnail_service.h"
 #include "ui/builders.h"
 #include "ui/controls/box.h"
+#include "ui/controls/image.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 
@@ -26,19 +27,17 @@ namespace {
     return tryParseHexColor(path.substr(kPrefix.size()), out);
   }
 
-  [[nodiscard]] float overlayControlSize(float contentScale) { return Style::controlHeightSm * contentScale; }
+  float overlayControlSize(float contentScale) { return Style::controlHeightSm * contentScale; }
 
   // Star hit box sits flush in the thumbnail's top-right corner, glyph centered inside it.
-  [[nodiscard]] float starButtonSize(float contentScale) { return overlayControlSize(contentScale); }
+  float starButtonSize(float contentScale) { return overlayControlSize(contentScale); }
 
-  [[nodiscard]] float starShadowOffset(float contentScale) { return std::max(0.5F, 1.0F * contentScale); }
+  float starShadowOffset(float contentScale) { return std::max(0.5F, 1.0F * contentScale); }
 
   // Theme-mode badge: a snug pill around its caption-sized glyph.
-  [[nodiscard]] float modeBadgeSize(float contentScale) {
-    return (Style::fontSizeCaption + Style::spaceXs * 2.0F) * contentScale;
-  }
+  float modeBadgeSize(float contentScale) { return (Style::fontSizeCaption + Style::spaceXs * 2.0F) * contentScale; }
 
-  [[nodiscard]] float activeThumbScale(bool selected, bool current, bool hovered) {
+  float activeThumbScale(bool selected, bool current, bool hovered) {
     if (selected || current) {
       return 1.04F;
     }
@@ -57,8 +56,7 @@ namespace {
     glyph->setShadow(colorSpecFromRole(ColorRole::Shadow, 0.58F), 0.0F, offset);
   }
 
-  [[nodiscard]] bool
-  starRegionContains(float cellWidth, float /*cellHeight*/, float contentScale, float localX, float localY) {
+  bool starRegionContains(float cellWidth, float /*cellHeight*/, float contentScale, float localX, float localY) {
     const float padding = Style::spaceXs * contentScale;
     const float frameWidth = std::max(0.0F, cellWidth - padding * 2.0F);
     const float btnSize = starButtonSize(contentScale);
@@ -112,7 +110,6 @@ WallpaperTile::WallpaperTile(float cellWidth, float cellHeight, float contentSca
     }
   });
 
-  const float frameRadius = Style::scaledRadiusLg(m_contentScale);
   const float badgeSize = modeBadgeSize(m_contentScale);
 
   auto layout = ui::column({
@@ -124,11 +121,9 @@ WallpaperTile::WallpaperTile(float cellWidth, float cellHeight, float contentSca
   m_layout->addChild(
       ui::box({
           .out = &m_thumbHost,
-          .radius = frameRadius,
-          .configure = [frameRadius](Box& box) {
-            box.setRadius(frameRadius);
-            box.setClipChildren(true);
-          },
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = m_contentScale,
+          .configure = [](Box& box) { box.setClipChildren(true); },
       })
   );
 
@@ -136,7 +131,8 @@ WallpaperTile::WallpaperTile(float cellWidth, float cellHeight, float contentSca
       ui::image({
           .out = &m_thumb,
           .fit = ImageFit::Cover,
-          .radius = frameRadius,
+          .styleRadius = Style::radiusLg,
+          .styleRadiusScale = m_contentScale,
           .participatesInLayout = false,
       })
   );
@@ -182,7 +178,8 @@ WallpaperTile::WallpaperTile(float cellWidth, float cellHeight, float contentSca
           .minWidth = badgeSize,
           .minHeight = badgeSize,
           .padding = Style::spaceXs * m_contentScale * 0.5F,
-          .radius = Style::scaledRadiusSm(m_contentScale),
+          .styleRadius = Style::radiusSm,
+          .styleRadiusScale = m_contentScale,
           .visible = false,
           .participatesInLayout = false,
       })
@@ -455,7 +452,7 @@ void WallpaperTile::refreshThumbnail(Renderer& renderer) {
     if (m_thumbTargetPx > 0) {
       m_thumbnails->release(m_thumbPath, m_thumbTargetPx);
     }
-    (void)m_thumbnails->acquire(m_thumbPath, targetPx);
+    m_thumbnails->acquire(m_thumbPath, targetPx);
     m_thumbTargetPx = targetPx;
   }
   if (m_thumbTargetPx <= 0) {

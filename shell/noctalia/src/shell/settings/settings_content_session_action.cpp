@@ -1,5 +1,6 @@
 #include "config/config_types.h"
 #include "i18n/i18n.h"
+#include "shell/dialogs/glyph_picker_dialog.h"
 #include "shell/session/session_action_meta.h"
 #include "shell/settings/settings_content.h"
 #include "shell/settings/settings_content_common.h"
@@ -10,7 +11,6 @@
 #include "ui/controls/keybind_recorder.h"
 #include "ui/controls/select.h"
 #include "ui/controls/stepper.h"
-#include "ui/dialogs/glyph_picker_dialog.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
@@ -95,7 +95,8 @@ namespace settings {
         .minWidth = controlHeight,
         .maxWidth = controlHeight,
         .padding = 0.0F,
-        .radius = Style::scaledRadiusMd(scale),
+        .styleRadius = Style::radiusMd,
+        .styleRadiusScale = scale,
     });
 
     Button* clearGlyphBtnPtr = nullptr;
@@ -107,7 +108,8 @@ namespace settings {
         .minHeight = controlHeight,
         .paddingV = Style::spaceXs * scale,
         .paddingH = Style::spaceSm * scale,
-        .radius = Style::scaledRadiusSm(scale),
+        .styleRadius = Style::radiusSm,
+        .styleRadiusScale = scale,
         .visible = hasCustomGlyph(),
         .participatesInLayout = hasCustomGlyph(),
     });
@@ -304,6 +306,7 @@ namespace settings {
           .modifierPolicy = policy,
           .escapeCancels = true,
           .flexGrow = 1.0F,
+          .onReject = notifyKeybindRejected,
           .configure = [controlHeight](KeybindRecorder& control) { control.setMinHeight(controlHeight); },
       });
       auto clearBtn = ui::button({
@@ -314,7 +317,8 @@ namespace settings {
           .minWidth = controlHeight,
           .minHeight = controlHeight,
           .padding = Style::spaceXs * scale,
-          .radius = Style::scaledRadiusSm(scale),
+          .styleRadius = Style::radiusSm,
+          .styleRadiusScale = scale,
           .visible = (row.*member).has_value(),
       });
       recorderPtr->setOnCommit([&row, member, persist, clearBtnPtr](KeyChord chord) {

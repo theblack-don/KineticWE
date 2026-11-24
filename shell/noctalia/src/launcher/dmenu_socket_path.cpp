@@ -1,6 +1,6 @@
 #include "launcher/dmenu_socket_path.h"
 
-#include "util/file_utils.h"
+#include "core/application_identity.h"
 
 #include <cstdlib>
 
@@ -18,7 +18,7 @@ namespace noctalia::launcher {
     }
 
     return {
-        .path = std::string(runtime) + "/" + std::string(FileUtils::kAppDirName) + "-dmenu-" + display + ".sock",
+        .path = std::string(runtime) + "/" + std::string(applicationIdentity().name) + "-dmenu-" + display + ".sock",
         .error = {}
     };
   }
