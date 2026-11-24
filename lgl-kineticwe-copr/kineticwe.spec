@@ -23,12 +23,12 @@
 # ===========================================================================
 
 Name:           kineticwe
-Version:        0.2.1
+Version:        0.2.2
 Release:        1%{?dist}
 Summary:        Tiling KWin Wayland compositor
 
 License:        GPL-2.0-or-later AND LGPL-2.0-or-later AND MIT AND BSD-3-Clause AND CC0-1.0
-URL:            https://gitlab.com/theblackdon/kineticwe
+URL:            https://github.com/theblack-don/KineticWE
 Source0:        %{name}-%{version}.tar.gz
 Source1:        kglobalacceld-%{kglobalacceld_ref}.tar.gz
 Source3:        kineticwe.desktop
@@ -561,6 +561,11 @@ echo
 %{_datadir}/polkit-1/actions/org.noctalia.greeter.apply-appearance.policy
 
 %changelog
+* Tue Nov 24 2026 LGL <lgl@localhost> - 0.2.2-1
+- Sync the vendored Noctalia shell to 5.6 with the new Noctalia build.
+- Add Emerge window default widths and font size / hot corner settings.
+- Point the project URL at GitHub.
+
 * Tue Nov 10 2026 LGL <lgl@localhost> - 0.2.1-1
 - added fonts and gtk file picker options and other stuff
 
