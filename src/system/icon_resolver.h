@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,6 +18,8 @@ struct IconSearchDir {
   int minSize = 0;
   int maxSize = 0;
 };
+
+struct IconDirIndex;
 
 struct IconThemeWatchPaths {
   std::vector<std::string> baseDirs;
@@ -43,7 +47,7 @@ public:
   // downscale gently instead of crushing a 1024px PNG. targetSize == 0 keeps the
   // legacy "prefer scalable, then largest" behavior for callers that have no size.
   const std::string& resolve(const std::string& iconName, int targetSize = 0);
-  [[nodiscard]] ResolvedIcon resolveSymbolicPreferred(const std::string& iconName, int targetSize = 0);
+  ResolvedIcon resolveSymbolicPreferred(const std::string& iconName, int targetSize = 0);
   // Select status SVG artwork by logical size within the normal winner's theme.
   // Returns empty when normal lookup selects application artwork or a bitmap.
   std::string resolveStatusVector(const std::string& iconName, int targetSize);
@@ -55,16 +59,22 @@ public:
   static IconThemeWatchPaths themeWatchPaths();
   static std::uint64_t themeGeneration();
   static std::string activeThemeName();
+  // The active theme chain's roots when its index.theme sets FollowsColorScheme (KDE), else empty.
+  static std::vector<std::string> colorSchemeThemeRoots();
 
 private:
   void rebuild();
   void ensureFresh();
   std::string findIcon(const std::string& name, int targetSize) const;
+  const IconDirIndex& dirIndex(std::size_t searchDir) const;
+  bool dirHasIcon(std::size_t searchDir, const std::string& name, std::string_view extension) const;
 
   std::unordered_map<std::string, std::string> m_cache;
   std::unordered_map<std::string, ResolvedIcon> m_symbolicPreferredCache;
   std::unordered_set<std::string> m_missingCache;
-  std::vector<std::string> m_baseDirs;     // XDG icon theme roots
+  // This resolver's references to the shared indexes, parallel to m_searchDirs.
+  mutable std::vector<std::shared_ptr<const IconDirIndex>> m_dirIndexes;
+  std::vector<std::string> m_baseDirs;     // XDG icon base dirs: theme roots and unthemed fallback
   std::vector<IconSearchDir> m_searchDirs; // Ordered list of concrete theme dirs to search
   std::vector<std::string> m_pixmapDirs;   // XDG pixmap fallback roots
   std::string m_empty;

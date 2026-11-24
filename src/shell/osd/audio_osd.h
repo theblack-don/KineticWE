@@ -11,13 +11,11 @@ class AudioOsd {
 public:
   void bindOverlay(OsdOverlay& overlay);
   void setSoundPlayer(class SoundPlayer* soundPlayer);
-  void primeFromService(const PipeWireService& service);
-  void suppressFor(std::chrono::milliseconds duration);
 
   void showOutput(std::uint32_t sinkId, float volume, bool muted, bool playFeedback = true);
   void showOutputName(std::string name, bool muted);
 
-  void showInput(std::uint32_t sourceId, float volume, bool muted, bool playFeedback = true);
+  void showInput(std::uint32_t sourceId, float volume, bool muted);
   void showInputName(std::string name, bool muted);
 
   // Paint only: no sound, no suppression, no snapshot writes. Displaying a value on request must not
@@ -28,6 +26,8 @@ public:
   void onAudioStateChanged(const PipeWireService& service);
 
 private:
+  void suppressFor(std::chrono::milliseconds duration);
+
   OsdOverlay* m_overlay = nullptr;
   OsdKind m_currentKind = OsdKind::Volume; // what the visible OSD is showing, for live mute correction
   std::uint32_t m_lastSinkId = 0;
@@ -38,6 +38,7 @@ private:
   float m_lastSourceVolume = -1.0F;
   int m_lastSourcePercent = -1;
   bool m_lastSourceMuted = false;
+  bool m_hasConnected = false;
   std::chrono::steady_clock::time_point m_suppressUntil;
   std::chrono::steady_clock::time_point m_suppressAutoInputOsdUntil;
   std::chrono::steady_clock::time_point m_lastSoundAt;

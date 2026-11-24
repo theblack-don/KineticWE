@@ -39,7 +39,9 @@
       "backdrop-shadow-offset-x": "Deslocamento X",
       "backdrop-shadow-offset-y": "Deslocamento Y",
       "backdrop-shadow-opacity": "Opacidade",
-      "capture-new-region": "Capturar nova região (descarta a edição atual)",
+      "capture": "Capturar novamente",
+      "capture-new-region": "Capturar nova região (Ctrl+R) · descarta a edição atual",
+      "capture-window": "Capturar a janela focada quando o editor abrir (Ctrl+W) · descarta a edição atual",
       "close": "Fechar editor",
       "color-black": "Preto (8)",
       "color-blue": "Azul (4)",
@@ -89,12 +91,17 @@
       "tool-numbering": "Marcador numerado (n)",
       "tool-rectangle": "Retângulo (s) · segure Shift para um quadrado",
       "tool-text": "Texto (t)",
-      "undo": "Desfazer (Ctrl+Z)"
+      "undo": "Desfazer (Ctrl+Z)",
+      "zoom": "Zoom · Ctrl+roda do mouse para aproximar, Ctrl+arrastar para mover a visão",
+      "zoom-in": "Aproximar (Ctrl++)",
+      "zoom-out": "Afastar (Ctrl+-)",
+      "zoom-reset": "Enquadrar na visão (Ctrl+0)"
     },
     "screenshot": {
       "annotate-export-failed": "Falha ao construir a imagem anotada",
       "choose-display": "Escolha o monitor",
       "confirm-region": "{copy} para copiar · {save} para salvar · Enter ou Espaço para padrões · {cancel} para cancelar · Arraste para reselecionar",
+      "confirm-region-space": "{copy} para copiar · {save} para salvar · Enter para padrões · {cancel} para cancelar · Arraste pare selecionar novamente · Segure Barra de Espaço para mover",
       "fullscreen": "Tela cheia",
       "overlay-alloc-failed": "Não foi possível mostrar a camada de captura de tela (GPU sem memória disponível?",
       "region": "Selecione a área"
@@ -401,6 +408,7 @@
       "error-missing-password": "Entre sua senha.",
       "error-unsupported-phase2": "PEAP requer autenticação interna MSCHAPv2",
       "external-ip": "WAN {ip}",
+      "hotspot-active": "O Wi-Fi em modo Ponto de Acesso; desligar o Wi-Fi interrompe essa função",
       "identity": "Identidade",
       "no-networks": "Nenhuma conexão ao alcance",
       "not-connected": "Não conectado",
@@ -420,10 +428,16 @@
     },
     "notifications": {
       "clear-all": "Apagar todas as notificações",
+      "collapse": "Retrair",
+      "collapse-group": "Retrair grupo",
+      "dismiss": "Dispensar",
+      "dismiss-group": "Dispensar grupo",
       "dnd-off": "Desligar Não Perturbe",
       "dnd-on": "Ligar Não Perturbe",
       "empty-body": "Notificações recentes aparecerão aqui",
       "empty-title": "Sem Notificações",
+      "expand": "Expandir",
+      "expand-group": "Expandir grupo",
       "filter": {
         "all": "Todas",
         "older": "Antigas",
@@ -687,6 +701,7 @@
         "show-label": "Exibir Rótulo",
         "show-login-button": "Botão de Login",
         "show-media": "Mídia",
+        "show-media-controls": "Controles de Mídia",
         "show-password-hint": "Dica de Senha",
         "show-password-reveal": "Revelar Senha",
         "show-seconds": "Ponteiro dos Segundos",
@@ -829,7 +844,8 @@
         "objects": "Objetos",
         "people": "Pessoas",
         "symbols": "Símbolos",
-        "travel": "Viagem"
+        "travel": "Viagem",
+        "unicode": "Unicode"
       },
       "recently-used": "Usado Recentemente"
     },
@@ -1167,7 +1183,9 @@
         "unset-placeholder": "Clique para vincular…"
       },
       "list": {
-        "add-entry-placeholder": "Adicionar entrada..."
+        "add-entry": "Adicionar entrada",
+        "add-entry-placeholder": "Adicionar entrada...",
+        "drag": "Reordenar"
       },
       "path-browse": {
         "file-title": "Escolher arquivo",
@@ -1240,7 +1258,7 @@
           "drag": "Reordenar",
           "drawer-columns": "Colunas da Gaveta",
           "drawer-columns-description": "Número de widgets por linha no painel gaveta",
-          "drawer-detached": "Painel Destacado",
+          "drawer-detached": "Painel Desanexado",
           "drawer-detached-description": "Abrir a gaveta como um painel flutuante com seu próprio fundo ao invés de mesclar com a barra",
           "drawer-enabled": "Gaveta",
           "drawer-enabled-description": "Mover os widgets do grupo para um painel deslizante alternado por um botão",
@@ -1318,13 +1336,18 @@
           "groups": {
             "actions": "Ações",
             "behavior": "Comportamento",
-            "grouping": "Agrupamento",
-            "presentation": "Apresentação",
-            "runtime": "Tempo de Execução",
+            "capsule": "Cápsula",
+            "colors": "Cores",
+            "content": "Conteúdo",
+            "size-text": "Tamanho e Texto",
             "taskbar": {
               "grouping": "Agrupamento",
               "windows": "Janelas",
               "workspace-labels": "Rótulos de Espaços de Trabalho"
+            },
+            "tray": {
+              "drawer": "Gaveta",
+              "icon-overrides": "Substituições de ícones"
             },
             "widget": "Widget",
             "workspaces": {
@@ -1368,6 +1391,13 @@
       "write": "Falha em salvar as configurações."
     },
     "export-config": {
+      "credentials-blank": "Branco",
+      "credentials-blank-description": "Mantém chaves de credenciais com valores vazios para que você possa ver o preencher depois de importar.",
+      "credentials-keep": "Manter",
+      "credentials-keep-description": "Exporta credenciais como configuradas. Manter o arquivo privado.",
+      "credentials-omit": "Omitir",
+      "credentials-omit-description": "Deixa as credenciais fora do arquivo.",
+      "credentials-title": "Credenciais",
       "export": "Exportar",
       "full-effective-description": "Exporta todas as configurações ativas, incluindo as configurações padrão integradas. Útil para inspeção ou compartilhamento de um snapshot, mas fixa explicitamente as configurações padrão atuais.",
       "full-effective-save-title": "Salvar Configuração Completa Efetiva",
@@ -1375,7 +1405,7 @@
       "merged-user-description": "Combina arquivos de configuração e alterações na interface gráfica em um único arquivo TOML. Os valores padrão predefinidos permanecem implícitos.",
       "merged-user-save-title": "Salvar Configuração de Usuário Mesclada",
       "merged-user-title": "Configuração de Usuário Mesclada (Recomendado)",
-      "privacy-warning-description": "Ambos modos de exportação podem incluir chaves de API, senhas ou outros dados sensíveis armazenados em seu arquivo de configuração, incluindo plugins. Trate arquivos exportados como privados. Revise e remova dados sensíveis antes de compartilhar.",
+      "privacy-warning-description": "As credenciais são URLs de servidores de calendário, URLs de origem de plug-ins do Git e configurações de plug-ins que o plug-in marca como segredos. Qualquer outra informação que você tenha digitado na sua configuração, como um token em um comando, é sempre exportada. Verifique o arquivo antes de compartilhá-lo.",
       "privacy-warning-title": "Exportações podem conter segredos",
       "title": "Exportar Configuração"
     },
@@ -1405,7 +1435,10 @@
       "live-status": {
         "active": "Ativo",
         "idle-for-one": "Idle for 1 second",
-        "idle-for-seconds": "Idle for {seconds} seconds"
+        "idle-for-seconds": "Idle for {seconds} seconds",
+        "inhibit-reason-caffeine": "Cafeína",
+        "inhibit-reason-external": "fonte externa",
+        "inhibited": "Inibido: {inhibitors}"
       }
     },
     "navigation": {
@@ -1502,6 +1535,7 @@
         "keybinds": "Atalhos do Teclado",
         "launcher": "Launcher",
         "location": "Localização",
+        "lock-screen": "Tela de Bloqueio",
         "niri": "Niri",
         "notifications": "Notificações",
         "osd": "OSD",
@@ -1510,7 +1544,7 @@
         "popups": "Popups",
         "power": "Energia",
         "screenshot": "Captura de tela",
-        "security": "Segurança",
+        "security": "Privacidade & Segurança",
         "services": "Serviços",
         "shell": "Shell",
         "system": "Sistema",
@@ -1608,11 +1642,13 @@
         "window-switcher": "Alternador de Janela"
       },
       "layer": {
+        "follow": "Seguir",
         "overlay": "Overlay",
         "top": "Topo"
       },
       "lockscreen": {
         "transition": {
+          "crt": "CRT",
           "diamond": "Diamante",
           "disc": "Disco",
           "fade": "Esvanescer",
@@ -1668,6 +1704,7 @@
           "ctrl": "Ctrl",
           "none": "Nenhuma",
           "shift": "Shift",
+          "space": "Espaço",
           "super": "Super"
         }
       },
@@ -1712,7 +1749,9 @@
         },
         "window-switcher-style": {
           "carousel": "Carrossel ",
-          "compact": "Compacto"
+          "compact": "Compacto",
+          "grid": "Grade",
+          "icons": "Somente Ícones"
         }
       },
       "theme": {
@@ -1728,6 +1767,10 @@
           "community": "Comunidade",
           "custom": "Personalizada",
           "wallpaper": "Papel de Parede"
+        },
+        "terminal-colors": {
+          "palette": "Paleta",
+          "standard": "Padrão"
         }
       },
       "theme-role": {
@@ -1748,6 +1791,7 @@
           "random": "Aleatória"
         },
         "transition": {
+          "crt": "CRT",
           "diamond": "Diamante",
           "disc": "Disco",
           "fade": "Desvanecer",
@@ -1787,7 +1831,7 @@
       "browse-store": "Navegar Plugins",
       "panels": {
         "layer": {
-          "description": "Camada layer-shell usada quando o painel está flutuando",
+          "description": "Camada layer-shell usada quando o painel está flutuando; Seguir usa a camada do Shell do painel flutuante",
           "label": "Camada"
         },
         "open-near-click": {
@@ -1911,12 +1955,12 @@
           "label": "Animações"
         },
         "app-icon-color": {
-          "description": "Paleta de cores usada para colorir ícones de aplicativos",
+          "description": "Paleta de cores compartilhada para componentes com Colorir Ícones de Aplicativos habilitado",
           "label": "Cor do Ícone de Aplicativo"
         },
         "app-icon-colorize": {
           "description": "Recolorir os ícones dos aplicativos em toda a interface para combinar com a paleta ativa.",
-          "label": "Colorir Ícones dos Apps"
+          "label": "Colorir Ícones dos Aplicativos"
         },
         "builtin-palette": {
           "description": "Escolha uma paleta de cores do catálogo incluído.",
@@ -2000,6 +2044,10 @@
           "description": "Definir a preferência de sistema para mode escuro/claro lido por navegadores e outros apps para seguir o Modo do Tema",
           "label": "Sincronizar Esquema de Cores do App"
         },
+        "terminal-colors": {
+          "description": "Paleta corresponde as cores do terminal para o papel de parede; Padrão mantém vermelho, verde e amarelo reconhecível",
+          "label": "Cores do Terminal"
+        },
         "theme-mode": {
           "description": "Escolha o modo Escuro, Claro ou Automático baseado na hora do dia; também aplica em apps através de modelos",
           "label": "Modo do Tema"
@@ -2033,6 +2081,10 @@
         "auto-hide-delay": {
           "description": "Aguardar esta quantidade de milissegundos depois que o ponteiro sair antes de ocultar a barra; 0 oculta imediatamente (somente no modo Ligado)",
           "label": "Atraso de Auto-Ocultação"
+        },
+        "auto-hide-reserve-space": {
+          "description": "Com auto-ocultação ou auto-ocultação inteligente, reserve o layout somente enquanto a barra estiver visível, assim janelas ocultas usarão toda a tela",
+          "label": "Reservar Espaço Enquanto Visível"
         },
         "background-opacity": {
           "description": "Opacidade do plano de fundo da barra"
@@ -2133,7 +2185,7 @@
           "label": "Widgets Finais"
         },
         "ends-margin": {
-          "description": "Encurta a barra nas duas extremidades ao longo do comprimento; defina como 0 px para uma barra com largura ou altura total"
+          "description": "Encurta a barra nas duas extremidades ao longo de seu comprimento, em pixels ou como uma porcentagem da tela; definir para 0 para uma uma barra de largura ou altura total"
         },
         "font-family": {
           "description": "Fonte a ser usada nos widgets desta barra; deixe em branco para herdar a fonte global (Família de fontes definida para cada widget tem prioridade sobre esta)",
@@ -2279,6 +2331,10 @@
         "auto-hide": {
           "description": "Desligado mantém o Dock visível; Ligado o oculta até que você mova o ponteiro para a borda da tela; Inteligente mostra o Dock em um espaço de trabalho vazio e o oculta quando há janelas abertas"
         },
+        "auto-hide-reveal-delay": {
+          "description": "Por quanto tempo o ponteiro deve ficar na canto da tela antes que a Dock revele-se; 0 revela imediatamente",
+          "label": "Atraso de Revelação"
+        },
         "background-opacity": {
           "description": "Opacidade do plano de fundo do dock"
         },
@@ -2324,6 +2380,14 @@
         },
         "ends-margin": {
           "description": "Espaço nas extremidades do Dock ao longo do eixo principal"
+        },
+        "icon-saturation": {
+          "description": "Saturação de cor dos ícones de aplicações; 0 é ton de cinza",
+          "label": "Saturação de Ícone"
+        },
+        "icon-shadow": {
+          "description": "Projetar uma sombra suave seguindo a forma do ícone de cada aplicação",
+          "label": "Sombra de Ícone"
         },
         "icon-size": {
           "description": "Tamanho dos ícones do Dock em pixels",
@@ -2491,6 +2555,14 @@
           "description": "Feche janelas pop-up, descarte painéis ou interrompa a operação atual",
           "label": "Cancelar"
         },
+        "category-next": {
+          "description": "Revelar categorias do Launcher quando ocultas, então avançar para a categoria seguinte ou aba da Central de Controle ",
+          "label": "Categoria Seguinte"
+        },
+        "category-previous": {
+          "description": "Revelar categorias do Launcher quando ocultas, então retroceder para a categoria anterior ou aba da Central de Controle ",
+          "label": "Categoria Anterior"
+        },
         "copy": {
           "description": "Copiar a seleção ou item atual",
           "label": "Copiar"
@@ -2514,6 +2586,10 @@
         "save": {
           "description": "Salvar a seleção ou item atual",
           "label": "Salvar"
+        },
+        "select-all": {
+          "description": "Selecionar toda a Área de Trabalho durante a captura de tela de região",
+          "label": "Selecionar Todas"
         },
         "tab-next": {
           "description": "Mover o foco para o próximo controle",
@@ -2545,6 +2621,10 @@
           "description": "Use uma captura de tela da área de trabalho como plano de fundo da tela de bloqueio",
           "label": "Captura da Área de Trabalho"
         },
+        "dnd": {
+          "description": "Habilitar Não Perturbe enquanto a sessão estiver trancada · o estado anterior é restaurado ao destrancar ",
+          "label": "Não Perturbe"
+        },
         "edge-smoothness": {
           "description": "Suavização das extremidades da transição da tela de bloqueio",
           "label": "Suavidade das Extremidades da Transição"
@@ -2569,8 +2649,12 @@
           "description": "Escolha em quais monitores a tela de bloqueio será exibida; deixe em branco para exibir em todos os monitores",
           "label": "Monitores"
         },
+        "tint-color": {
+          "description": "Cor da tonalidade do fundo da Tela de Bloqueio",
+          "label": "Cor da Tonalidade"
+        },
         "tint-intensity": {
-          "description": "Base de cor da superfície sobre o fundo da tela de bloqueio",
+          "description": "Força da tonalidade sobre o fundo da tela de bloqueio",
           "label": "Intensidade da Cor"
         },
         "transition-duration": {
@@ -2636,9 +2720,19 @@
           "description": "Mostrar novas lâminas de notificação no monitor focado",
           "label": "Seguir Saída focada"
         },
+        "group-by-app": {
+          "description": "Agrupar notificações na aba de histórico por aplicação",
+          "label": "Agrupar por Aplicação"
+        },
         "history-retention-hours": {
           "description": "Automaticamente remover histórico de notificações se existir por mais que esta quantidade de horas (0 para manter para sempre)",
           "label": "Período de Retenção"
+        },
+        "history-storage": {
+          "button": "Tentar novamente",
+          "description-recovery": "Histórico salvo de notificação não pôde ser autenticado ou está danificado; tente novamente após restaurar a chave correta ou redefina o armazenamento privado",
+          "description-unavailable": "Histórico salvo de notificação criptografado não está aberto, então notificações são mantidas somente para esta sessão; destranque o armazenamento privado ou restaure a chave configurada, então tente novamente",
+          "label": "Armazenamento de Histórico de Notificação"
         },
         "keep-dismissed-in-history": {
           "description": "Manter notificações no histórico depois que suas lâminas foram dispensadas",
@@ -2655,6 +2749,10 @@
         "monitors": {
           "description": "Escolha quais monitores mostram lâminas de notificação; deixe em branco para exibir em todos os monitores",
           "label": "Monitores"
+        },
+        "newest-on-edge": {
+          "description": "Coloque cada nova lâmina contra o canto da tela correspondente à sua posição e empurre as notificações mais antigas para fora, em vez de anexá-la ao final da pilha",
+          "label": "Lâmina Mais Recente no Canto"
         },
         "offset-x": {
           "description": "Margem horizontal absoluta a partir da borda da tela ou da barra",
@@ -2679,6 +2777,10 @@
         "show-app-name": {
           "description": "Exibir o nome do aplicativo remetente nas lâminas de notificação",
           "label": "Exibir Nome do App"
+        },
+        "show-progress-bar": {
+          "description": "Mostrar a barra de progresso na lâmina de notificação do tempo restante e como um tom estático nas lâminas críticas persistentes",
+          "label": "Mostrar Barra de Progresso"
         },
         "toast-opacity": {
           "description": "Opacidade do plano de fundo das lâminas de notificação",
@@ -2723,16 +2825,12 @@
           "label": "Camada do Painel Flutuante"
         },
         "floating-offset": {
-          "description": "Espaço, em pixels, entre um painel flutuante ou separado e a extremidade da barra",
+          "description": "Espaço, em pixels, entre um painel flutuante ou desanexado e a extremidade da barra",
           "label": "Deslocamento de Flutuação"
         },
         "home-avatar-border": {
           "description": "Mostrar o anel de destaque ao redor do avatar da guia “Início”",
           "label": "Mostrar Borda do Avatar"
-        },
-        "home-circular-avatar": {
-          "description": "Usar avatares circulares; desabilite para seguir o arredondamento dos cantos do shell",
-          "label": "Avatar Circular"
         },
         "home-session-button": {
           "description": "Mostrar o botão de ações de sessão no cabeçalho da aba Início",
@@ -2763,7 +2861,7 @@
           "label": "Exibir Categorias"
         },
         "launcher-category-icons-only": {
-          "description": "Mostrar somente ícones para categorias de apps, com nomes completos nas dicas ao passar o mouse",
+          "description": "Mostrar somente ícones para categorias de aplicações e provedores com nomes completos nas dicas ao passar o mouse",
           "label": "Apenas Ícones de Categorias"
         },
         "launcher-compact": {
@@ -3162,6 +3260,18 @@
           "description": "Tocar um som quando o carregador conectar ou desconectar",
           "label": "Sons de Energia"
         },
+        "scheduled-brightness": {
+          "description": "Ativar agenda de mudanças automáticas de brilho baseadas no nascer ou pôr do Sol",
+          "label": "Brilho Agendado"
+        },
+        "scheduled-day-brightness": {
+          "description": "Nível de brilho durante o dia",
+          "label": "Brilho Diurno"
+        },
+        "scheduled-night-brightness": {
+          "description": "Nível de brilho durante a noite",
+          "label": "Brilho Noturno"
+        },
         "screenshot-sounds": {
           "description": "Tocar um som ao fazer uma captura",
           "label": "Sons de Captura de Tela"
@@ -3178,6 +3288,11 @@
         "sound-volume": {
           "description": "Volume para efeitos de som do shell",
           "label": "Volume do Áudio"
+        },
+        "spectrum-frame-rate": {
+          "description": "Taxas maiores são mais suaves mas usam mais recursos",
+          "label": "Taxa de Frames do Visualizador",
+          "option": "{fps} FPS"
         },
         "sunrise": {
           "description": "Horário manual do nascer do sol em HH:MM, usado quando não há localização definida",
@@ -3242,7 +3357,7 @@
           "placeholder": "/path/to/sound.wav"
         },
         "volume-sounds": {
-          "description": "Tocar um som quando o volume de entrada ou de saída muda",
+          "description": "Tocar um som quando o volume de saída muda",
           "label": "Volume dos Sons"
         },
         "weather": {
@@ -3268,6 +3383,10 @@
         },
         "background-opacity": {
           "label": "Opacidade do Plano de Fundo"
+        },
+        "colorize-icons": {
+          "description": "Colorir ícones de aplicações aqui utilizando a Cor do Ícone de Aplicativo em Aparência",
+          "label": "Colorir Ícones de Aplicativos"
         },
         "contact-shadow": {
           "label": "Sombra de Contato"
@@ -3326,6 +3445,10 @@
           "description": "Caminho para uma imagem de avatar personalizada; imagens grandes são cortadas e redimensionadas automaticamente",
           "label": "Caminho do Avatar",
           "placeholder": "/path/to/avatar.png"
+        },
+        "circular-avatar": {
+          "description": "Utilizar avatares circulares no Launcher e Central de Controle;  desabilitar para seguir a curvatura dos cantos do shell",
+          "label": "Avatar Circular"
         },
         "clipboard-auto-paste": {
           "description": "Colar automaticamente as seleções da área de transferência",
@@ -3567,6 +3690,10 @@
           "description": "Abrir o editor de anotações em cada captura de tela; Concluir aplica as configurações de salvar, área de transferência e pipe",
           "label": "Anotar Antes de Entregar"
         },
+        "screenshot-append-mode-suffix": {
+          "description": "Anexar um sufixo de modo de captura como -region, -annotated, -window ou -desktop a nomes de arquivos salvos",
+          "label": "Modo Anexar Sufixo "
+        },
         "screenshot-close-on-copy": {
           "description": "Fechar depois de uma cópia bem sucedida do editor, incluindo quando for aberto diretamente",
           "label": "Fechar Editor Depois da Cópia"
@@ -3629,7 +3756,7 @@
           "label": "Opacidade do Escurecimento da Região"
         },
         "screenshot-region-modifier": {
-          "description": "Modificador para mover ou redimensionar uma região selecionada: arraste com o botão esquerdo para mover, arraste com o botão direito para redimensionar a partir dos terços externos (os cantos redimensionam em ambos os eixos). Nenhuma opção (padrão) mantém o comportamento padrão de arrastar para ajustar",
+          "description": "Modificador para mover ou redimensionar uma região selecionada: arraste com o botão esquerdo para mover, arraste com o botão direito utilizando as bordas ou da área selecionada, que redimensionam em todas as direções. Com Barra de Espaço, somente Enter confirma a região",
           "label": "Modificador de Movimento/Redimensionamento"
         },
         "screenshot-remember-last-region": {
@@ -3706,19 +3833,19 @@
           "label": "Mostrar Todos Monitores"
         },
         "window-switcher-show-app-icon": {
-          "description": "Mostrar ícone de cada aplicação sobre sua janela de pré-visualização",
+          "description": "Mostrar ícone de cada aplicação sobre sua janela de pré-visualização; ícones são sempre mostrados em Apenas Ícones",
           "label": "Mostrar Ícone de Aplicação"
         },
         "window-switcher-show-caption": {
-          "description": "Mostrar títulos de janelas e nomes de aplicações abaixo de suas pré-visualização",
+          "description": "Mostrar títulos de pré-visualizações ou o título da janela selecionada abaixo do ícone da grade",
           "label": "Mostrar Legenda"
         },
         "window-switcher-show-count": {
-          "description": "Mostrar a posição atual e contagem total de janelas acima das pré-visualizações",
+          "description": "Mostrar a posição atual e contagem total de janelas acima do alternador",
           "label": "Mostrar Contagem de Janelas"
         },
         "window-switcher-style": {
-          "description": "Escolher o carrossel independente de profundidade ou a faixa compacta em caixa",
+          "description": "Escolher o carrossel de previsão, faixa de previsão compacta, grade de previsão ou grade de somente ícones",
           "label": "Estilo do Alternador"
         }
       },
@@ -3823,6 +3950,10 @@
           "description": "Usa pastas de papéis de parede separadas para cada monitor",
           "label": "Diretórios por Monitor"
         },
+        "sync-transitions": {
+          "description": "Usar o mesmo efeito de transição em todos os monitores quando papéis de parede mudam",
+          "label": "Sincronizar Transição dos Monitores"
+        },
         "transition-duration": {
           "description": "Duração da animação de mudança de papel de parede em milissegundos",
           "label": "Duração da Transição"
@@ -3865,7 +3996,7 @@
     "storage-recovery": {
       "button": "Redefinir Armazenamento Privado",
       "button-confirm": "Confirmar Redefinição de Armazenamento",
-      "description": "Permanentemente apaga histórico de área de transferência armazenado e o cache de evento de calendário, então reabra o armazenamento privado (um arquivo de chave configurado nunca é modificado)",
+      "description": "Apagar permanentemente área de transferência salva e histórico de notificação, imagens de notificação e cachê de eventos de calendário, então re-abra o armazenamento privado (um arquivo de chave configurada nunca é modificado)",
       "error-delete": "Alguns arquivos do armazenamento privado não puderam ser apagados. A chave de armazenamento foi preservada.",
       "error-key": "Arquivos do armazenamento privado foram apagados, mas o armazenamento seguro não pôde ser reaberto. Corrija o acesso e tente novamente.",
       "label": "Recuperar Armazenamento Privado",
@@ -4052,7 +4183,7 @@
             "label": "Sincronizar aparência do greeter"
           },
           "keyboard-backlight-down": {
-            "description": "Diminuir retroiluminação de todos teclados em um nível",
+            "description": "Diminuir retroiluminação de todos teclados em 5%",
             "label": "Diminuir retroiluminação de teclado"
           },
           "keyboard-backlight-osd": {
@@ -4068,7 +4199,7 @@
             "label": "Alternar retroiluminação de todos teclados"
           },
           "keyboard-backlight-up": {
-            "description": "Aumentar retroiluminação de todos teclados em um nível",
+            "description": "Aumentar retroiluminação de todos teclados em 5%",
             "label": "Aumentar retroiluminação de teclado"
           },
           "keyboard-layout-cycle": {
@@ -4405,6 +4536,8 @@
         "cpu-freq": "Frequência da CPU",
         "cpu-temp": "Temperatura da CPU",
         "cpu-usage": "Uso da CPU",
+        "default": "Padrão",
+        "desktop": "Área de Trabalho",
         "disk-free": "Disco Livre",
         "disk-free-percent": "Disco Livre %",
         "disk-used": "Disco Usado",
@@ -4447,6 +4580,7 @@
         "shared": "Compartilhado",
         "short": "Curto",
         "swap-percent": "Swap %",
+        "symbolic": "Simbólico",
         "text": "Texto",
         "text-only": "Apenas Texto",
         "time": "Tempo",
@@ -4554,6 +4688,10 @@
           "description": "Segunda cor de gradiente no visualizador",
           "label": "Cor 2"
         },
+        "colorize-icons": {
+          "description": "Colorir os ícones de aplicações deste widget utilizando a Cor do Ícone de Aplicativo em Aparência",
+          "label": "Colorir Ícones de Aplicativos"
+        },
         "custom-image": {
           "description": "Caminho para uma imagem personalizada; deixe em branco para usar o símbolo padrão",
           "dialog-title": "Selecionar Imagem Personalizada",
@@ -4564,12 +4702,12 @@
           "label": "Colorir Imagem Personalizada"
         },
         "custom-label": {
-          "description": "Texto personalizado mostrado ao lado do símbolo ou imagem personalizada; permanece visível quando Mostrar Símbolo estiver desativada",
+          "description": "Texto personalizado mostrado com este widget; deixe vazio para ocultar",
           "label": "Rótulo Personalizado"
         },
         "detached-panel": {
           "description": "Abre a gaveta como um painel flutuante ao invés de ancorá-lo à extremidade da barra",
-          "label": "Painel Descolado"
+          "label": "Painel Desanexado"
         },
         "device": {
           "description": "Dispositivo para monitorar ou controlar",
@@ -4588,6 +4726,10 @@
           "description": "Exibir um botão de bandeja na barra e abrir itens em um painel",
           "label": "Utilizar o Painel da Gaveta"
         },
+        "drawer-background-opacity": {
+          "description": "Opacidade do fundo do painel da gaveta desanexada",
+          "label": "Opacidade do Fundo da Gaveta"
+        },
         "drawer-columns": {
           "description": "Número de ícones da bandeja por linha no painel da gaveta",
           "label": "Colunas da Gaveta"
@@ -4604,9 +4746,17 @@
           "description": "Função de cor usada para espaços de trabalho vazios; cores hexadecimais fixas também são suportadas",
           "label": "Cor Vazia"
         },
+        "empty-label": {
+          "description": "Texto mostrado quando não há janela focada; deixe vazio para mostrar \"Não há janela ativa\"",
+          "label": "Rótulo Vazio"
+        },
         "enable-scroll": {
           "description": "Permitir ações de roda do mouse e rolagem de trackpad neste widget",
           "label": "Ativar Rolagem"
+        },
+        "expand": {
+          "description": "Expandir até ocupar uma parte igual do espaço livre da faixa inicial ou final; noutros pontos, o espaçador mantém seu comprimento",
+          "label": "Expandir"
         },
         "focused-color": {
           "description": "Função de cor usada para a área de trabalho em foco; cores hexadecimais fixas também são suportadas",
@@ -4638,11 +4788,13 @@
           "description": "Nome do símbolo do ícone",
           "label": "Símbolo",
           "sysmon-description": "Símbolo de ícone personalizado; Deixe em branco para usar o ícone da estatística selecionada.",
+          "tray-description": "Símbolo personalizado da bandeja; deixe em branco para um chevron apontando na direção da gaveta ou da revelação da espiada",
           "volume-description": "Símbolo de ícone personalizado; Deixe em branco para usar os ícones dinâmicos integrados"
         },
         "glyph-position": {
-          "description": "Posicione o símbolo ou imagem personalizada e rótulo personalizado relativo ao valor ou visualização",
-          "label": "Posição do Símbolo"
+          "description": "Posicione o símbolo antes ou depois do varlo; com Espiar ligado, o valor revela no outro lado",
+          "label": "Posição do Símbolo",
+          "sysmon-description": "Posicionar o símbolo ou imagem personalizada e rótulo personalizado relativo ao valor ou visualização"
         },
         "group-by-workspace": {
           "description": "Agrupe os ícones da barra de tarefas em cápsulas do espaço de trabalho quando os dados do compositor estiverem disponíveis",
@@ -4679,6 +4831,10 @@
         "hide-inactive": {
           "description": "Oculta ícones de privacidade inativos e oculta o widget quando nada estiver ativo",
           "label": "Ocultar Inativo"
+        },
+        "hide-label-when-muted": {
+          "description": "Ocultar a porcetagem do volume enquanto o dispositivo está mutado, deixando somente o ícone de Mudo",
+          "label": "Ocultar Rótulo Enquanto Mutado"
         },
         "hide-passive": {
           "description": "Ocultar itens da bandeja cujo status do StatusNotifierItem seja \"Passive\"",
@@ -4741,6 +4897,10 @@
           "description": "Substitui a cor do widget apenas para ícones; cores hexadecimais fixas também são suportadas",
           "label": "Cor do Ícone"
         },
+        "icon-override-blacklist": {
+          "description": "Lista de ícones da bandeja para serem excluídos da substituição de ícones",
+          "label": "Lista de Exceções da Substituição de Ícones"
+        },
         "icon-scale": {
           "description": "Escala dos ícones dos aplicativos na barra de tarefas em relação ao seu tamanho padrão",
           "label": "Escala de Ícone"
@@ -4752,6 +4912,10 @@
         "icon-spacing": {
           "description": "Espaçamento entre indicador ícones do indicador de privacidade",
           "label": "Espaçamento do Ícone"
+        },
+        "icon-type": {
+          "description": "Selecionar o tipo de ícones para usar na bandeja",
+          "label": "Tipo de ícone"
         },
         "inactive-color": {
           "description": "Cor usada indicadores de privacidades não usados; cores hex fixas também são suportadas",
@@ -4771,7 +4935,7 @@
           "label": "Interativo"
         },
         "interface": {
-          "description": "Interface de rede para monitorar; deixe vazio para usar o total agregado de todas interfaces",
+          "description": "Interface de rede para monitorar; deixe vazio para usar o total agregado de todas interfaces físicas",
           "label": "Interface"
         },
         "item-spacing": {
@@ -4869,6 +5033,14 @@
           "description": "Caminho usado pelas estatísticas do disco",
           "label": "Caminho"
         },
+        "peek": {
+          "description": "Mostra somente o símbolo; o valor desliza para fora enquanto o ponteiro paira sobre o widget",
+          "label": "Espiar"
+        },
+        "peek-delay-ms": {
+          "description": "Tempo do passar sobre em milissegundos antes que o valor comece a deslizar para fora; 0 revela de uma vez",
+          "label": "Atraso de Espiar"
+        },
         "pill-scale": {
           "description": "Ajuste a escala das pílulas do espaço de trabalho",
           "label": "Escala da Pílula",
@@ -4912,6 +5084,14 @@
           "description": "Escolha se ações de rolagem seguem semânticas de comando, executa uma vez por gesto ou repete para cada etapa de rolagem",
           "label": "Repetição de Rolagem"
         },
+        "separator": {
+          "description": "Texto entre os indicadores de espaço de trabalho; deixe vazio para não usar um separador ou espaço extra",
+          "label": "Separador"
+        },
+        "separator-color": {
+          "description": "Cores utilizadas para separadores de espaços de trabalho; cores hexadecimais fixas também são suportadas",
+          "label": "Cor do Separador"
+        },
         "show-active-indicator": {
           "description": "Exibir um pequeno ponto abaixo do ícone da janela ativa na barra de tarefas",
           "label": "Indicador de Janela Ativa "
@@ -4919,10 +5099,6 @@
         "show-all-outputs": {
           "description": "Incluir janelas de todos os monitores neste widget",
           "label": "Exibir Todos Monitores"
-        },
-        "show-all-workspaces": {
-          "description": "Mostrar espaços de trabalho de todos monitores neste widget",
-          "label": "Mostrar Todos Monitores"
         },
         "show-caps-lock": {
           "description": "Mostra o estado do Caps Lock",
@@ -5096,6 +5272,11 @@
         "workspace-label-placement": {
           "description": "No canto, centralizado na extremidade ou dentro de uma pílula",
           "label": "Posicionamento do rótulo do espaço de trabalho"
+        },
+        "workspace-monitors": {
+          "all": "Todos Monitores",
+          "description": "Escolher espaços de trabalho de quais monitores aparecem neste widget, em ordem. Deixe vazio para mostrar somente os espaços de trabalho do monitor que hospeda a barra",
+          "label": "Espaços de Trabalho dos Monitores"
         }
       },
       "types": {
@@ -5245,6 +5426,24 @@
   },
   "ui": {
     "controls": {
+      "key-names": {
+        "backspace": "Backspace",
+        "delete": "Delete",
+        "down": "Baixo",
+        "end": "End",
+        "enter": "Enter",
+        "escape": "Escape",
+        "home": "Home",
+        "insert": "Insert",
+        "left": "Esquerda",
+        "numpad-enter": "Enter do Numérico",
+        "page-down": "Page Down",
+        "page-up": "Page Up",
+        "right": "Direita",
+        "space": "Barra de Espaço",
+        "tab": "Tab",
+        "up": "Cima"
+      },
       "search-picker": {
         "empty": "Sem resultados",
         "placeholder": "Buscar..."

@@ -16,15 +16,21 @@ namespace scripting {
 
     // Returns the resolved path if the file is already available (cached or on disk).
     // Returns empty if a background fetch was started (onReady fires when it lands)
-    // or the file is known to not exist in the source.
-    std::string resolve(const std::string& pluginId, const PluginSourceConfig& source, const std::string& filename);
+    // or the file is known to not exist in the source. `filename` is relative to the
+    // plugin directory ("README.md", "screenshots/panel.png"); "." and ".." components
+    // are rejected. `revision` is the commit a git source's catalog entry resolved to,
+    // which may be ahead of the applied HEAD; path sources ignore it.
+    std::string resolve(
+        const std::string& pluginId, const PluginSourceConfig& source, const std::string& revision,
+        const std::string& filename
+    );
 
     void setOnReady(ReadyCallback cb);
 
     void invalidateSource(const std::string& sourceName);
 
   private:
-    [[nodiscard]] static std::string
+    static std::string
     cacheFilePath(const std::string& sourceName, const std::string& pluginSubdir, const std::string& filename);
 
     ReadyCallback m_onReady;

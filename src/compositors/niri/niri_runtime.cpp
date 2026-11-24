@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <iterator>
+#include <optional>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -22,7 +23,6 @@ namespace compositors::niri {
     constexpr auto kReconnectInitial = std::chrono::seconds(2);
     constexpr auto kReconnectMax = std::chrono::seconds(30);
     constexpr std::size_t kReadBufferMaxBytes = 1024U * 1024U;
-    constexpr std::string_view kEventStreamRequest = "\"EventStream\"\n";
 
     [[nodiscard]] bool writeAll(int fd, std::string_view data) {
       std::size_t offset = 0;
@@ -157,7 +157,7 @@ namespace compositors::niri {
     }
 
     try {
-      return {IpcReply::Status::Replied, nlohmann::json::parse(response)};
+      return {IpcReply::Status::Replied, std::make_optional(nlohmann::json::parse(response))};
     } catch (const nlohmann::json::exception&) {
       return {IpcReply::Status::InvalidJson, std::nullopt};
     }

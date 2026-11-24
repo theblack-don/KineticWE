@@ -6,13 +6,14 @@
 #include "config/config_types.h"
 #include "core/deferred_call.h"
 #include "i18n/i18n.h"
-#include "net/url_open.h"
 #include "notification/notification_filter.h"
 #include "render/render_context.h"
 #include "render/scene/input_area.h"
 #include "scripting/plugin_catalog.h"
 #include "scripting/plugin_recommendations.h"
 #include "scripting/plugin_registry.h"
+#include "shell/dialog_popup_settings.h"
+#include "shell/dialogs/file_dialog.h"
 #include "shell/settings/bar_widget_editor.h"
 #include "shell/settings/color_spec_picker.h"
 #include "shell/settings/plugin_store_content.h"
@@ -32,7 +33,6 @@
 #include "ui/controls/flex.h"
 #include "ui/controls/input.h"
 #include "ui/controls/segmented.h"
-#include "ui/dialogs/file_dialog.h"
 #include "ui/popup_parent.h"
 #include "util/file_utils.h"
 #include "util/string_utils.h"
@@ -196,7 +196,7 @@ namespace {
   }
 
   bool calendarSourceChecked(const CalendarAccountDraft& draft, const CalendarSource& source) {
-    return draft.calendars.empty() || std::ranges::contains(draft.calendars, source.id);
+    return draft.calendars.empty() ? source.defaultSelected : std::ranges::contains(draft.calendars, source.id);
   }
 
   std::string trimInput(Input* input) { return input != nullptr ? StringUtils::trim(input->value()) : std::string{}; }
@@ -375,6 +375,7 @@ void SettingsWindow::openActionsMenu() {
           .entries = std::move(entries),
           .minMenuWidth = 220.0F * scale,
           .maxMenuWidth = Style::menuAutoMaxWidth * scale,
+          .textScale = m_textScale,
           .maxVisible = 8,
           .anchor =
               PopupAnchorRect{
@@ -404,7 +405,9 @@ void SettingsWindow::openConfigExportDialog() {
   m_configExportDialogModal->open(
       settings::ConfigExportDialogRequest{
           .scale = uiScale(),
-          .callback = [this](settings::ConfigExportMode mode) { saveConfigExport(mode); },
+          .callback = [this](settings::ConfigExportMode mode, noctalia::config::CredentialExportMode credentials) {
+            saveConfigExport(mode, credentials);
+          },
       }
   );
 }
@@ -428,6 +431,7 @@ void SettingsWindow::openBarWidgetAddPopup(const std::vector<std::string>& laneP
   if (m_widgetAddPopup == nullptr) {
     m_widgetAddPopup = std::make_unique<settings::WidgetAddPopup>();
     m_widgetAddPopup->initialize(*m_wayland, *m_config, *m_renderContext);
+    m_widgetAddPopup->setTextScale(m_textScale);
     m_widgetAddPopup->setOnSelect([this](
                                       const std::vector<std::string>& selectedLanePath, const std::string& value,
                                       const std::string& newInstanceType, const std::string& newInstanceId,
@@ -490,18 +494,21 @@ void SettingsWindow::openSearchPickerPopup(settings::SearchPickerOpenRequest req
 
   if (m_searchPickerPopup == nullptr) {
     m_searchPickerPopup = std::make_unique<SearchPickerPopup>();
-    m_searchPickerPopup->initialize(*m_wayland, *m_config, *m_renderContext);
+    m_searchPickerPopup->initialize(*m_wayland, dialogPopupSettings(*m_config), *m_renderContext);
+    m_searchPickerPopup->setTextScale(m_textScale);
   }
 
   if (m_widgetAddPopup != nullptr && m_widgetAddPopup->isOpen()) {
     m_widgetAddPopup->close();
   }
 
-  m_searchPickerPopup->setOnSelect([this, settingPath = request.settingPath, selectedValue = request.selectedValue,
-                                    onSelect = request.onSelect](const std::string& value) {
-    if (value == selectedValue) {
+  // `currentValue` follows picks so a picker that stays open skips re-applying the option already applied.
+  m_searchPickerPopup->setOnSelect([this, settingPath = request.settingPath, currentValue = request.selectedValue,
+                                    onSelect = request.onSelect](const std::string& value) mutable {
+    if (value == currentValue) {
       return;
     }
+    currentValue = value;
     if (onSelect) {
       onSelect(value);
       return;
@@ -521,8 +528,9 @@ void SettingsWindow::openSearchPickerPopup(settings::SearchPickerOpenRequest req
             .value = opt.value,
             .label = opt.label,
             .description = opt.description,
+            .group = opt.group,
             .enabled = true,
-            .icon = {},
+            .icon = opt.icon,
             .preview = opt.preview,
         }
     );
@@ -544,6 +552,7 @@ void SettingsWindow::openSearchPickerPopup(settings::SearchPickerOpenRequest req
           .placeholder = std::move(request.placeholder),
           .emptyText = std::move(request.emptyText),
           .scale = uiScale(),
+          .keepOpenOnSelect = request.keepOpenOnSelect,
       }
   );
 }
@@ -687,7 +696,8 @@ void SettingsWindow::openMonitorOverrideCreateDialog(std::optional<std::string> 
                 .minHeight = Style::controlHeight * scale,
                 .paddingV = Style::spaceXs * scale,
                 .paddingH = Style::spaceMd * scale,
-                .radius = Style::scaledRadiusMd(scale),
+                .styleRadius = Style::radiusMd,
+                .styleRadiusScale = scale,
                 .onClick = std::move(onSelect),
             })
         );
@@ -733,7 +743,8 @@ void SettingsWindow::openMonitorOverrideCreateDialog(std::optional<std::string> 
                 .minHeight = Style::controlHeight * scale,
                 .paddingV = Style::spaceXs * scale,
                 .paddingH = Style::spaceMd * scale,
-                .radius = Style::scaledRadiusMd(scale),
+                .styleRadius = Style::radiusMd,
+                .styleRadiusScale = scale,
                 .onClick =
                     [this] {
                       if (m_editorSheetModal != nullptr) {
@@ -748,7 +759,8 @@ void SettingsWindow::openMonitorOverrideCreateDialog(std::optional<std::string> 
                 .minHeight = Style::controlHeight * scale,
                 .paddingV = Style::spaceXs * scale,
                 .paddingH = Style::spaceMd * scale,
-                .radius = Style::scaledRadiusMd(scale),
+                .styleRadius = Style::radiusMd,
+                .styleRadiusScale = scale,
                 .onClick = doCreate,
             })
         )
@@ -1270,6 +1282,9 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
     draft->calendars = account->calendars;
     if (account->type == "google") {
       draft->provider = CalendarAccountProvider::Google;
+      const std::string rawDiscovery =
+          m_config->stateString(kCalendarDiscoveryOwner, account->id + "_calendars").value_or(std::string{});
+      draft->discoveredCalendars = calendar::parseCalendarSources(rawDiscovery);
     } else if (account->type == "ics") {
       draft->provider = CalendarAccountProvider::IcsFileURL;
     } else if (account->type == "vdir") {
@@ -1317,7 +1332,7 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
               markSettingsWriteError(message);
               return;
             }
-            (void)m_config->setStateString(kCalendarDiscoveryOwner, accountId + "_calendars", "");
+            m_config->setStateString(kCalendarDiscoveryOwner, accountId + "_calendars", "");
             markSettingsWriteSuccess(true);
             if (m_editorSheetModal != nullptr) {
               m_editorSheetModal->close();
@@ -1629,7 +1644,7 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
         )
     );
 
-    if (!draft->creating && draft->provider != CalendarAccountProvider::Google && !draft->discoveredCalendars.empty()) {
+    if (!draft->creating && !draft->discoveredCalendars.empty()) {
       auto calendars = ui::column({
           .align = FlexAlign::Stretch,
           .gap = Style::spaceXs * scale,
@@ -1648,7 +1663,8 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
           .gap = Style::spaceXs * scale,
           .padding = Style::spaceSm * scale,
           .fill = colorSpecFromRole(ColorRole::SurfaceContainerLow),
-          .radius = Style::scaledRadiusMd(scale),
+          .styleRadius = Style::radiusMd,
+          .styleRadiusScale = scale,
       });
       for (const CalendarSource& source : draft->discoveredCalendars) {
         const bool checked = calendarSourceChecked(*draft, source);
@@ -1798,17 +1814,17 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
       const std::vector<std::string> base = {"calendar", "account", draft->id};
 
       std::string type = "caldav";
-      if (draft->provider == CalendarAccountProvider::Google)
+      if (draft->provider == CalendarAccountProvider::Google) {
         type = "google";
-      else if (ics)
+      } else if (ics) {
         type = "ics";
-      else if (vdir)
+      } else if (vdir) {
         type = "vdir";
+      }
 
       overrides.push_back({{base[0], base[1], base[2], "type"}, type});
       overrides.push_back({{base[0], base[1], base[2], "name"}, draft->name});
       overrides.push_back({{base[0], base[1], base[2], "color"}, draft->color});
-      // Manual calendar selection is currently populated by CalDAV discovery; Google uses CalendarList selected.
       overrides.push_back({{base[0], base[1], base[2], "calendars"}, draft->calendars});
       if (caldav) {
         overrides.push_back(
@@ -1925,7 +1941,8 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
             .variant = ButtonVariant::Secondary,
             .minHeight = Style::controlHeight * scale,
             .paddingH = Style::spaceMd * scale,
-            .radius = Style::scaledRadiusMd(scale),
+            .styleRadius = Style::radiusMd,
+            .styleRadiusScale = scale,
             .onClick = [this] {
               if (m_editorSheetModal != nullptr) {
                 m_editorSheetModal->close();
@@ -1942,7 +1959,8 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
               .variant = ButtonVariant::Secondary,
               .minHeight = Style::controlHeight * scale,
               .paddingH = Style::spaceMd * scale,
-              .radius = Style::scaledRadiusMd(scale),
+              .styleRadius = Style::radiusMd,
+              .styleRadiusScale = scale,
               .onClick = [persistAccount] { persistAccount(true, false); },
           })
       );
@@ -1955,7 +1973,8 @@ void SettingsWindow::openCalendarAccountEditor(std::optional<std::string> accoun
             .variant = ButtonVariant::Primary,
             .minHeight = Style::controlHeight * scale,
             .paddingH = Style::spaceMd * scale,
-            .radius = Style::scaledRadiusMd(scale),
+            .styleRadius = Style::radiusMd,
+            .styleRadiusScale = scale,
             .onClick = [persistAccount, google] { persistAccount(true, google); },
         })
     );
@@ -2475,6 +2494,11 @@ void SettingsWindow::openPluginStore() {
           m_editorSheetModal->rebuildBody();
         }
       });
+      storeContent->setOnLayoutNeeded([this] {
+        if (m_pluginStoreSheetOpen && m_editorSheetModal != nullptr) {
+          m_editorSheetModal->requestLayout();
+        }
+      });
 
       m_editorSheetModal->open(
           settings::SettingsSheetRequest{
@@ -2492,11 +2516,12 @@ void SettingsWindow::openPluginStore() {
                     .minWidth = Style::controlHeightSm * scale,
                     .minHeight = Style::controlHeightSm * scale,
                     .padding = Style::spaceXs * scale,
-                    .radius = Style::scaledRadiusMd(scale),
+                    .styleRadius = Style::radiusMd,
+                    .styleRadiusScale = scale,
                     .onClick = [storeContent] { storeContent->closeDetail(); },
                 });
               },
-              .createHeaderAction = [storeContent, scale] -> std::unique_ptr<Node> {
+              .createHeaderAction = [this, storeContent, scale] -> std::unique_ptr<Node> {
                 const auto pageUrl = storeContent->detailPageUrl();
                 const auto sourceUrl = storeContent->detailSourceUrl();
                 if (!pageUrl.has_value() && !sourceUrl.has_value()) {
@@ -2513,8 +2538,9 @@ void SettingsWindow::openPluginStore() {
                           .minWidth = Style::controlHeightSm * scale,
                           .minHeight = Style::controlHeightSm * scale,
                           .padding = Style::spaceXs * scale,
-                          .radius = Style::scaledRadiusMd(scale),
-                          .onClick = [url = *pageUrl] { (void)net::openInBrowser(url); },
+                          .styleRadius = Style::radiusMd,
+                          .styleRadiusScale = scale,
+                          .onClick = [this, url = *pageUrl] { openBrowserUrl(url); },
                       })
                   );
                 }
@@ -2528,8 +2554,9 @@ void SettingsWindow::openPluginStore() {
                           .minWidth = Style::controlHeightSm * scale,
                           .minHeight = Style::controlHeightSm * scale,
                           .padding = Style::spaceXs * scale,
-                          .radius = Style::scaledRadiusMd(scale),
-                          .onClick = [url = *sourceUrl] { (void)net::openInBrowser(url); },
+                          .styleRadius = Style::radiusMd,
+                          .styleRadiusScale = scale,
+                          .onClick = [this, url = *sourceUrl] { openBrowserUrl(url); },
                       })
                   );
                 }
@@ -2547,7 +2574,7 @@ void SettingsWindow::openPluginStore() {
                           )
                       );
                     }
-                    storeContent->populateBody(body, m_surface->renderTarget().renderer(), m_asyncTextures);
+                    storeContent->populateBody(body, m_surface->renderTarget().renderer());
                   },
               .scale = scale,
               .minWidth = 800.0F,
@@ -2574,6 +2601,7 @@ void SettingsWindow::openPluginStore() {
                     storeContent->detachGrid();
                     m_pluginFileCache.setOnReady(nullptr);
                     storeContent->setOnRebuildNeeded(nullptr);
+                    storeContent->setOnLayoutNeeded(nullptr);
                     m_pluginStoreSheetOpen = false;
                   },
           }
@@ -2613,6 +2641,7 @@ void SettingsWindow::openCommunityTemplateStore() {
           .setSelected = [this](
                              std::vector<std::string> ids
                          ) { setSettingOverride({"theme", "templates", "community_ids"}, std::move(ids)); },
+          .openBrowserUrl = [this](const std::string& url) { openBrowserUrl(url); },
           .scale = scale,
       }
   );
@@ -2708,7 +2737,9 @@ void SettingsWindow::saveSupportReport() {
   }
 }
 
-void SettingsWindow::saveConfigExport(settings::ConfigExportMode mode) {
+void SettingsWindow::saveConfigExport(
+    settings::ConfigExportMode mode, noctalia::config::CredentialExportMode credentials
+) {
   if (m_config == nullptr) {
     return;
   }
@@ -2722,29 +2753,31 @@ void SettingsWindow::saveConfigExport(settings::ConfigExportMode mode) {
                                 : i18n::tr("settings.export-config.merged-user-save-title");
   options.extensions = {".toml"};
 
-  const bool opened = FileDialog::open(std::move(options), [this, mode](std::optional<std::filesystem::path> result) {
-    if (!result.has_value() || m_config == nullptr) {
-      return;
-    }
+  const bool opened =
+      FileDialog::open(std::move(options), [this, mode, credentials](std::optional<std::filesystem::path> result) {
+        if (!result.has_value() || m_config == nullptr) {
+          return;
+        }
 
-    auto path = *result;
-    if (path.extension().empty()) {
-      path += ".toml";
-    }
+        auto path = *result;
+        if (path.extension().empty()) {
+          path += ".toml";
+        }
 
-    const std::string content = mode == settings::ConfigExportMode::FullEffective ? m_config->buildEffectiveConfig()
-                                                                                  : m_config->buildMergedUserConfig();
-    if (!writeTextFileAtomic(path, content)) {
-      m_statusMessage = i18n::tr("settings.errors.export-config");
-      m_statusIsError = true;
-      requestSceneRebuild();
-      return;
-    }
+        const std::string content = mode == settings::ConfigExportMode::FullEffective
+            ? m_config->buildEffectiveConfig(credentials)
+            : m_config->buildMergedUserConfig(credentials);
+        if (!writeTextFileAtomic(path, content)) {
+          m_statusMessage = i18n::tr("settings.errors.export-config");
+          m_statusIsError = true;
+          requestSceneRebuild();
+          return;
+        }
 
-    m_statusMessage = i18n::tr("settings.window.export-config-saved");
-    m_statusIsError = false;
-    requestSceneRebuild();
-  });
+        m_statusMessage = i18n::tr("settings.window.export-config-saved");
+        m_statusIsError = false;
+        requestSceneRebuild();
+      });
 
   if (!opened) {
     m_statusMessage = i18n::tr("settings.errors.export-config");

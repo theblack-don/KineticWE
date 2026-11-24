@@ -7,14 +7,15 @@
 #include "dbus/mpris/mpris_service.h"
 #include "ext-session-lock-v1-client-protocol.h"
 #include "i18n/i18n.h"
-#include "render/core/blur_cache.h"
 #include "render/core/render_styles.h"
 #include "render/core/shared_texture_cache.h"
 #include "render/render_context.h"
-#include "render/scene/wallpaper_node.h"
 #include "shell/lockscreen/lockscreen_login_box.h"
 #include "shell/lockscreen/lockscreen_session_actions.h"
+#include "shell/lockscreen/lockscreen_transition_cover.h"
 #include "shell/lockscreen/lockscreen_widgets_host.h"
+#include "shell/render/blur_cache.h"
+#include "shell/render/wallpaper_node.h"
 #include "shell/session/session_action_meta.h"
 #include "shell/session/session_action_runner.h"
 #include "system/weather_service.h"
@@ -23,7 +24,6 @@
 #include "ui/controls/button.h"
 #include "ui/controls/image.h"
 #include "ui/controls/label.h"
-#include "ui/controls/lockscreen_transition_cover.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/clamp.h"
@@ -40,6 +40,7 @@
 #include <tuple>
 #include <utility>
 #include <wayland-client-core.h>
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 namespace {
 
@@ -57,7 +58,7 @@ namespace {
   constexpr int kForecastDayCountAlone = 5;
   constexpr float kWeatherCurrentMinText = 56.0F;
 
-  [[nodiscard]] int fitForecastDays(
+  int fitForecastDays(
       Renderer& renderer, float weatherBudget, float weatherGlyphSize, float forecastGlyphSize, float captionSize,
       int maxDays
   ) {
@@ -77,7 +78,7 @@ namespace {
     return std::clamp(fit, 0, maxDays);
   }
 
-  [[nodiscard]] float forecastBlockWidth(Renderer& renderer, int dayCount, float forecastGlyphSize, float captionSize) {
+  float forecastBlockWidth(Renderer& renderer, int dayCount, float forecastGlyphSize, float captionSize) {
     if (dayCount <= 0) {
       return 0.0F;
     }
@@ -95,7 +96,7 @@ namespace {
     return tryParseHexColor(path.substr(kPrefix.size()), out);
   }
 
-  [[nodiscard]] ButtonVariant buttonVariantFor(SessionActionButtonVariant variant) {
+  ButtonVariant buttonVariantFor(SessionActionButtonVariant variant) {
     switch (variant) {
     case SessionActionButtonVariant::Default:
       return ButtonVariant::Default;
@@ -115,7 +116,7 @@ namespace {
 
   // Default/Ghost use SurfaceContainer or clear fills that disappear on the
   // SurfaceContainer login panel; Outline gives a readable Surface chip.
-  [[nodiscard]] ButtonVariant lockscreenSessionVariant(SessionActionButtonVariant variant) {
+  ButtonVariant lockscreenSessionVariant(SessionActionButtonVariant variant) {
     switch (variant) {
     case SessionActionButtonVariant::Default:
     case SessionActionButtonVariant::Ghost:
@@ -129,7 +130,7 @@ namespace {
     return ButtonVariant::Outline;
   }
 
-  [[nodiscard]] std::string weekdayAbbrev(const std::string& isoDate) {
+  std::string weekdayAbbrev(const std::string& isoDate) {
     if (isoDate.size() != 10) {
       return isoDate;
     }
@@ -144,7 +145,7 @@ namespace {
     return weekday.empty() ? isoDate : weekday;
   }
 
-  [[nodiscard]] std::string todayIso(std::int32_t utcOffsetSeconds) {
+  std::string todayIso(std::int32_t utcOffsetSeconds) {
     const auto now = std::chrono::system_clock::now() + std::chrono::seconds{utcOffsetSeconds};
     const std::time_t time = std::chrono::system_clock::to_time_t(now);
     std::tm tm{};
@@ -240,6 +241,7 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
           .width = kMediaArtSize,
           .height = kMediaArtSize,
           .visible = false,
+          .configure = [this](Image& image) { image.setAsyncReadyCallback([this] { requestUpdate(); }); },
       })
   );
   m_mediaBlock->addChild(
@@ -283,6 +285,87 @@ LockSurface::LockSurface(WaylandConnection& connection, ConfigService* config) :
           .color = colorSpecFromRole(ColorRole::OnSurfaceVariant),
           .maxLines = 1,
           .textAlign = TextAlign::Start,
+      })
+  );
+
+  m_mediaBlock->addChild(
+      ui::flex(
+          FlexDirection::Horizontal,
+          {
+              .out = &m_mediaControls,
+              .align = FlexAlign::Center,
+              .justify = FlexJustify::Start,
+              .gap = 2.0F,
+              .widthPolicy = FlexSizePolicy::Content,
+              .heightPolicy = FlexSizePolicy::Content,
+              .clipChildren = true,
+              .flexGrow = 0.0F,
+              .visible = false,
+              .configure = [](Flex& flex) { flex.setZIndex(2); },
+          }
+      )
+  );
+  m_mediaControls->addChild(
+      ui::button({
+          .out = &m_mediaPrevButton,
+          .glyph = "media-prev",
+          .glyphSize = 14.0F,
+          .variant = ButtonVariant::Ghost,
+          .minWidth = 24.0F,
+          .minHeight = 24.0F,
+          .padding = 4.0F,
+          .styleRadius = Style::radiusSm,
+          .styleRadiusScale = 1.0F,
+          .onClick =
+              [this] {
+                if (m_mpris != nullptr) {
+                  (void)m_mpris->previousActive();
+                  requestUpdate();
+                }
+              },
+          .configure = [](Button& button) { button.setZIndex(2); },
+      })
+  );
+  m_mediaControls->addChild(
+      ui::button({
+          .out = &m_mediaPlayPauseButton,
+          .glyph = "media-play",
+          .glyphSize = 14.0F,
+          .variant = ButtonVariant::Ghost,
+          .minWidth = 24.0F,
+          .minHeight = 24.0F,
+          .padding = 4.0F,
+          .styleRadius = Style::radiusSm,
+          .styleRadiusScale = 1.0F,
+          .onClick =
+              [this] {
+                if (m_mpris != nullptr) {
+                  (void)m_mpris->playPauseActive();
+                  requestUpdate();
+                }
+              },
+          .configure = [](Button& button) { button.setZIndex(2); },
+      })
+  );
+  m_mediaControls->addChild(
+      ui::button({
+          .out = &m_mediaNextButton,
+          .glyph = "media-next",
+          .glyphSize = 14.0F,
+          .variant = ButtonVariant::Ghost,
+          .minWidth = 24.0F,
+          .minHeight = 24.0F,
+          .padding = 4.0F,
+          .styleRadius = Style::radiusSm,
+          .styleRadiusScale = 1.0F,
+          .onClick =
+              [this] {
+                if (m_mpris != nullptr) {
+                  (void)m_mpris->nextActive();
+                  requestUpdate();
+                }
+              },
+          .configure = [](Button& button) { button.setZIndex(2); },
       })
   );
 
@@ -656,6 +739,8 @@ bool LockSurface::initialize(ext_session_lock_v1* lock, wl_output* output, std::
     return false;
   }
 
+  // The session must lock at once; images on the lock screen fill in as they decode.
+  setHoldFirstFrameForPendingContent(false);
   setRunning(true);
   return true;
 }
@@ -913,12 +998,13 @@ bool LockSurface::exitTransitionComplete() const noexcept {
   return m_transitionPhase == TransitionPhase::Disabled || m_transitionPhase == TransitionPhase::ExitComplete;
 }
 
-void LockSurface::setBackgroundStyle(float blurIntensity, float tintIntensity) {
-  if (m_blurIntensity == blurIntensity && m_tintIntensity == tintIntensity) {
+void LockSurface::setBackgroundStyle(float blurIntensity, float tintIntensity, const ColorSpec& tintColor) {
+  if (m_blurIntensity == blurIntensity && m_tintIntensity == tintIntensity && m_tintColor == tintColor) {
     return;
   }
   m_blurIntensity = blurIntensity;
   m_tintIntensity = tintIntensity;
+  m_tintColor = tintColor;
   m_captureDirty = true;
   m_blurCache.invalidate();
   m_wallpaperDirty = true;
@@ -1021,6 +1107,41 @@ void LockSurface::onThemeChanged() {
 void LockSurface::onKeyboardEvent(const KeyboardEvent& event) {
   if (m_blackout) {
     return;
+  }
+
+  if (m_locked && event.pressed) {
+    if (event.sym == XKB_KEY_XF86AudioPlay) {
+      m_connection.stopKeyRepeat();
+      if (m_mpris != nullptr) {
+        (void)m_mpris->playPauseActive();
+        requestUpdate();
+      }
+      return;
+    }
+    if (event.sym == XKB_KEY_XF86AudioPause) {
+      m_connection.stopKeyRepeat();
+      if (m_mpris != nullptr) {
+        (void)m_mpris->pauseActive();
+        requestUpdate();
+      }
+      return;
+    }
+    if (event.sym == XKB_KEY_XF86AudioNext) {
+      m_connection.stopKeyRepeat();
+      if (m_mpris != nullptr) {
+        (void)m_mpris->nextActive();
+        requestUpdate();
+      }
+      return;
+    }
+    if (event.sym == XKB_KEY_XF86AudioPrev) {
+      m_connection.stopKeyRepeat();
+      if (m_mpris != nullptr) {
+        (void)m_mpris->previousActive();
+        requestUpdate();
+      }
+      return;
+    }
   }
 
   if (m_locked
@@ -1318,7 +1439,7 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     if (showTint) {
       m_tintOverlay->setStyle(
           RoundedRectStyle{
-              .fill = colorForRole(ColorRole::Surface, tintIntensity),
+              .fill = resolveColorSpec(scaleAlpha(m_tintColor, tintIntensity)),
               .fillMode = FillMode::Solid,
           }
       );
@@ -1327,7 +1448,7 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
 
   m_loginPanel->setFill(loginStyle.panelFill);
   m_loginPanel->setBorder(colorForRole(ColorRole::OutlineVariant, loginStyle.panelOpacity), Style::borderWidth);
-  m_loginPanel->setRadius(Style::scaledRadius(loginStyle.panelRadius));
+  m_loginPanel->setStyleRadius(loginStyle.panelRadius);
   m_loginPanel->setSoftness(1.0F);
   m_loginPanel->setClipChildren(true);
 
@@ -1383,6 +1504,26 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   if (m_mediaArtist != nullptr) {
     m_mediaArtist->setFontSize(captionSize);
   }
+
+  const float mediaButtonSize = 24.0F * contentScale;
+  const float mediaGlyphSize = 14.0F * contentScale;
+  const float mediaButtonPadding = 4.0F * contentScale;
+  const float mediaControlsGap = 2.0F * contentScale;
+
+  if (m_mediaControls != nullptr) {
+    m_mediaControls->setGap(mediaControlsGap);
+  }
+  for (Button* button : {m_mediaPrevButton, m_mediaPlayPauseButton, m_mediaNextButton}) {
+    if (button == nullptr) {
+      continue;
+    }
+    button->setMinWidth(mediaButtonSize);
+    button->setMinHeight(mediaButtonSize);
+    button->setGlyphSize(mediaGlyphSize);
+    button->setPadding(mediaButtonPadding);
+    button->setStyleRadius(Style::radiusSm, contentScale);
+  }
+
   if (m_mediaBlock != nullptr) {
     m_mediaBlock->setVisible(showMedia);
     m_mediaBlock->setMaxWidth(mediaBudget);
@@ -1433,7 +1574,9 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
     }
   }
 
-  const float mediaTextMax = std::max(48.0F, mediaBudget - mediaArtSize - Style::spaceSm);
+  const bool showControls = m_mediaControls != nullptr && m_mediaControls->visible();
+  const float controlsWidth = showControls ? (3.0F * mediaButtonSize + 2.0F * mediaControlsGap + Style::spaceSm) : 0.0F;
+  const float mediaTextMax = std::max(48.0F, mediaBudget - mediaArtSize - Style::spaceSm - controlsWidth);
   if (m_mediaTitle != nullptr) {
     m_mediaTitle->setMaxWidth(mediaTextMax);
     m_mediaTitle->setEllipsize(TextEllipsize::End);
@@ -1498,13 +1641,13 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
         button->setFillHeight(true);
         button->setGlyphSize(sessionGlyphSize);
         button->setFontSize(captionSize);
-        button->setRadius(Style::scaledRadius(loginStyle.inputRadius));
+        button->setStyleRadius(loginStyle.inputRadius);
       }
     }
   }
 
   if (showLayoutChip) {
-    m_layoutChip->setRadius(Style::scaledRadius(loginStyle.inputRadius));
+    m_layoutChip->setStyleRadius(loginStyle.inputRadius);
     m_layoutChip->setMaxWidth(kLayoutChipMaxWidth);
     m_layoutChip->setFontSize(captionSize);
     m_layoutChip->setGlyphSize(captionSize);
@@ -1521,13 +1664,13 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
   const bool showLoginButton = loginVisible && loginStyle.showLoginButton;
   m_loginButton->setVisible(showLoginButton);
   if (showLoginButton) {
-    m_loginButton->setRadius(Style::scaledRadius(loginStyle.inputRadius));
+    m_loginButton->setStyleRadius(loginStyle.inputRadius);
     m_loginButton->setSize(controlHeight, controlHeight);
     m_loginButton->setGlyphSize(sessionGlyphSize);
   }
 
   if (m_passwordRevealButton != nullptr) {
-    m_passwordRevealButton->setRadius(Style::scaledRadius(loginStyle.inputRadius));
+    m_passwordRevealButton->setStyleRadius(loginStyle.inputRadius);
     m_passwordRevealButton->setSize(controlHeight, controlHeight);
     m_passwordRevealButton->setGlyphSize(sessionGlyphSize);
   }
@@ -1557,7 +1700,7 @@ void LockSurface::layoutScene(std::uint32_t width, std::uint32_t height) {
       m_authPanel->setPadding(authPadV, authPadH);
       m_authPanel->setFill(loginStyle.panelFill);
       m_authPanel->setBorder(colorForRole(ColorRole::OutlineVariant, loginStyle.panelOpacity), Style::borderWidth);
-      m_authPanel->setRadius(Style::scaledRadius(loginStyle.panelRadius));
+      m_authPanel->setStyleRadius(loginStyle.panelRadius);
       m_authPanel->setSoftness(1.0F);
       m_authPanel->setMinWidth(authW);
       m_authPanel->setMaxWidth(authW);
@@ -1716,7 +1859,8 @@ void LockSurface::rebuildSessionButtons() {
         .paddingV = Style::spaceXs,
         .paddingH = Style::spaceSm,
         .gap = Style::spaceXs,
-        .radius = Style::scaledRadiusMd(),
+        .styleRadius = Style::radiusMd,
+        .styleRadiusScale = 1.0F,
         .flexGrow = 1.0F,
         .onClick =
             [this, cfg] {
@@ -1779,30 +1923,55 @@ void LockSurface::syncRegularExtras(Renderer& renderer) {
       m_mediaArtist->setText(artist);
       m_mediaArtist->setVisible(!artist.empty());
     }
-    if (artChanged || (m_mediaArt != nullptr && !artUrl.empty() && !m_mediaArt->hasImage())) {
-      m_lastArtUrl = artUrl;
+    if (artChanged && m_mediaArt != nullptr) {
       const int targetPx = static_cast<int>(std::round(kMediaArtSize * std::max(1.0F, m_regularContentScale)));
-      bool hasArt = false;
-      if (m_mediaArt != nullptr) {
-        if (!artUrl.empty()) {
-          const std::string artPath = mpris::resolveArtworkSource(
-              m_httpClient, m_pendingArtDownloads, artUrl, [this] { requestUpdate(); }, m_aliveGuard
-          );
-          if (!artPath.empty()) {
-            hasArt = m_mediaArt->setSourceFile(renderer, artPath, targetPx, true, true);
-          }
-          if (!hasArt) {
-            m_mediaArt->clear(renderer);
-          }
-        } else {
-          m_mediaArt->clear(renderer);
-        }
-        m_mediaArt->setVisible(hasArt);
+      std::string artPath;
+      if (!artUrl.empty()) {
+        artPath = mpris::resolveArtworkSource(
+            m_httpClient, m_pendingArtDownloads, artUrl, [this] { requestUpdate(); }, m_aliveGuard
+        );
       }
+      if (!artPath.empty()) {
+        m_mediaArt->setSourceFile(
+            renderer, artPath, {.targetSize = targetPx, .mipmap = true, .centerSquareCrop = true}
+        );
+      } else {
+        m_mediaArt->clear(renderer);
+      }
+      // An unresolved remote URL stays unlatched so the next update retries once its download lands.
+      m_lastArtUrl = artUrl.empty() || !artPath.empty() ? artUrl : std::string{};
+    }
+    if (m_mediaArt != nullptr) {
+      // The disc fallback stands in only when there is no art or its decode failed, not while it loads.
+      const ImageLoadState artState = m_mediaArt->loadState();
+      const bool hasArt = artState == ImageLoadState::Loading || artState == ImageLoadState::Ready;
+      m_mediaArt->setVisible(hasArt);
       if (m_mediaFallbackGlyph != nullptr) {
         m_mediaFallbackGlyph->setVisible(!hasArt);
       }
     }
+
+    const bool hasActive = active.has_value();
+    const bool showControls = hasActive && style.showMediaControls;
+    if (m_mediaControls != nullptr) {
+      m_mediaControls->setVisible(showControls);
+    }
+    if (showControls) {
+      if (m_mediaPrevButton != nullptr) {
+        m_mediaPrevButton->setEnabled(active->canGoPrevious);
+      }
+      if (m_mediaNextButton != nullptr) {
+        m_mediaNextButton->setEnabled(active->canGoNext);
+      }
+      if (m_mediaPlayPauseButton != nullptr) {
+        m_mediaPlayPauseButton->setEnabled(active->canPlay || active->canPause);
+        m_mediaPlayPauseButton->setGlyph(active->playbackStatus == "Playing" ? "media-pause" : "media-play");
+      }
+    }
+  }
+
+  if (m_mediaControls != nullptr && (!extras.showMedia || !mediaReady || !style.showMediaControls)) {
+    m_mediaControls->setVisible(false);
   }
 
   if (m_weatherBlock != nullptr) {

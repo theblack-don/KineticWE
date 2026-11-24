@@ -6,6 +6,9 @@
 #include "dbus/network/inetwork_service.h"
 #include "pipewire/sound_player.h"
 #include "render/backend/render_backend.h"
+#include "render/codecs/icon_color_scheme.h"
+#include "system/icon_resolver.h"
+#include "ui/palette.h"
 
 #include <algorithm>
 #include <chrono>
@@ -33,10 +36,27 @@ namespace {
 
 void Application::onIconThemeChanged() {
   kLog.info("system icons changed; refreshing icon consumers");
+  updateIconColorScheme();
+  refreshIconConsumers();
+}
+
+void Application::refreshIconConsumers() {
   m_bar.reload();
-  m_dock.reload();
+  m_dock.onIconThemeChanged();
   m_panelManager.onIconThemeChanged();
   m_notificationToast.requestLayout();
+}
+
+bool Application::updateIconColorScheme() {
+  auto roots = IconResolver::colorSchemeThemeRoots();
+  if (roots == m_iconColorSchemeRoots && (roots.empty() || palette == m_iconColorSchemePalette)) {
+    return false;
+  }
+  codecs::setIconColorScheme(roots, palette);
+  m_iconColorSchemeRoots = std::move(roots);
+  m_iconColorSchemePalette = palette;
+  m_asyncTextureCache.reloadResidentTextures();
+  return true;
 }
 
 void Application::onGraphicsReset(RenderGraphicsResetStatus status) {
@@ -120,7 +140,17 @@ void Application::onUpowerStateChangedForHooks() {
     return;
   }
   const auto& state = m_upowerService->state();
-  const auto plugged = state.isPresent ? batteryStatePlugged(state.state) : std::nullopt;
+  // Without a system battery the default state follows the lowest-charged peripheral. When that
+  // selection moves to another device, rebaseline instead of reporting the new device's charge
+  // state as a plug/unplug or a battery hook transition.
+  if (const auto& peripheralPath = m_upowerService->statePeripheralPath();
+      peripheralPath != m_prevBatteryPeripheralPathForEvents) {
+    m_prevBatteryPeripheralPathForEvents = peripheralPath;
+    m_prevBatteryPluggedForEvents = m_upowerService->externalPowerConnected();
+    m_batteryHookState.reset(state);
+    return;
+  }
+  const auto plugged = m_upowerService->externalPowerConnected();
   if (plugged.has_value()) {
     if (m_prevBatteryPluggedForEvents.has_value()
         && *m_prevBatteryPluggedForEvents != *plugged

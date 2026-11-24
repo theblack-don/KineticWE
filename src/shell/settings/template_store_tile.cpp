@@ -1,6 +1,6 @@
 #include "shell/settings/template_store_tile.h"
 
-#include "shell/tooltip/tooltip_content.h"
+#include "render/scene/tooltip_content.h"
 #include "ui/builders.h"
 #include "ui/controls/checkbox.h"
 #include "ui/controls/label.h"
@@ -17,7 +17,7 @@ namespace settings {
     setPadding(Style::spaceXs * scale, Style::spaceSm * scale);
     setFill(colorSpecFromRole(ColorRole::SurfaceContainerLow));
     setBorder(colorSpecFromRole(ColorRole::OutlineVariant, Style::disabledOutlineAlpha), Style::borderWidth * scale);
-    setRadius(Style::scaledRadiusMd(scale));
+    setStyleRadius(Style::radiusMd, scale);
 
     addChild(
         ui::checkbox({

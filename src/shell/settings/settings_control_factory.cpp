@@ -5,6 +5,7 @@
 #include "i18n/i18n.h"
 #include "render/scene/input_area.h"
 #include "shell/bar/widget_action.h"
+#include "shell/dialogs/file_dialog.h"
 #include "shell/settings/color_spec_picker.h"
 #include "shell/settings/path_browse.h"
 #include "shell/settings/settings_content_common.h"
@@ -18,18 +19,19 @@
 #include "ui/controls/slider.h"
 #include "ui/controls/stepper.h"
 #include "ui/controls/toggle.h"
-#include "ui/dialogs/file_dialog.h"
 #include "ui/palette.h"
 #include "ui/style.h"
 #include "util/string_utils.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
 #include <functional>
 #include <memory>
+#include <ranges>
 #include <unordered_set>
 #include <utility>
 
@@ -141,9 +143,9 @@ namespace settings {
 
     // Argument specs spell required arguments as <id> and optional ones as [context]. A <> nested
     // inside brackets is still optional, so only a top-level one makes the argument mandatory.
-    [[nodiscard]] bool specTakesArguments(std::string_view spec) { return !spec.empty(); }
+    bool specTakesArguments(std::string_view spec) { return !spec.empty(); }
 
-    [[nodiscard]] bool specRequiresArgument(std::string_view spec) {
+    bool specRequiresArgument(std::string_view spec) {
       int optionalDepth = 0;
       for (const char c : spec) {
         if (c == '[') {
@@ -189,7 +191,8 @@ namespace settings {
         .minHeight = Style::controlHeightSm * scale,
         .paddingV = Style::spaceXs * scale,
         .paddingH = Style::spaceSm * scale,
-        .radius = Style::scaledRadiusMd(scale),
+        .styleRadius = Style::radiusMd,
+        .styleRadiusScale = scale,
         .onClick = [clearOverrides = ctx.clearOverrides, requestConfirmation = ctx.requestResetConfirmation,
                     requestRebuild = ctx.requestRebuild, paths = std::move(paths), onConfirmed = std::move(onConfirmed),
                     pendingConfirmation] mutable {
@@ -216,7 +219,8 @@ namespace settings {
          .paddingV = matchResetHeight ? Style::spaceXs * scale : 0.0F,
          .paddingH = matchResetHeight ? Style::spaceSm * scale : Style::spaceXs * scale,
          .fill = fill,
-         .radius = Style::scaledRadiusSm(scale),
+         .styleRadius = Style::radiusSm,
+         .styleRadiusScale = scale,
          .minHeight = matchResetHeight ? std::optional<float>{Style::controlHeightSm * scale} : std::nullopt},
         makeLabel(label, Style::fontSizeCaption * scale, color, FontWeight::Bold)
     );
@@ -458,10 +462,12 @@ namespace settings {
         .minHeight = Style::controlHeight * scale,
         .paddingV = Style::spaceSm * scale,
         .paddingH = Style::spaceMd * scale,
-        .radius = Style::scaledRadiusMd(scale),
+        .styleRadius = Style::radiusMd,
+        .styleRadiusScale = scale,
         .onClick = [openPopup = ctx.openSearchPickerPopup, title = std::move(title), options = setting.options,
                     selectedValue = setting.selectedValue, placeholder = setting.placeholder,
-                    emptyText = setting.emptyText, path = std::move(path), onSelect = setting.onSelect] {
+                    emptyText = setting.emptyText, path = std::move(path), onSelect = setting.onSelect,
+                    keepOpenOnSelect = setting.keepOpenOnSelect] {
           if (openPopup) {
             openPopup(
                 SearchPickerOpenRequest{
@@ -472,6 +478,7 @@ namespace settings {
                     .emptyText = emptyText,
                     .settingPath = path,
                     .onSelect = onSelect,
+                    .keepOpenOnSelect = keepOpenOnSelect,
                 }
             );
           }
@@ -483,7 +490,8 @@ namespace settings {
       double value, double minValue, double maxValue, double step, const std::vector<std::string>& path,
       bool integerValue,
       const std::function<std::vector<std::pair<std::vector<std::string>, ConfigOverrideValue>>(double)>& linkedCommit,
-      std::string valueSuffix, SliderSetting::InvertSlot invertSlot, bool invertEnabled
+      std::string valueSuffix, SliderSetting::InvertSlot invertSlot, bool invertEnabled,
+      const std::function<void(double)>& preview
   ) {
     auto& ctx = m_ctx;
     const float scale = m_scale;
@@ -524,9 +532,12 @@ namespace settings {
         .controlHeight = Style::controlHeight * scale,
         .width = sliderWidth,
         .height = Style::controlHeight * scale,
-        .onValueChanged = [valueInputPtr, integerValue](double next) {
+        .onValueChanged = [valueInputPtr, integerValue, preview, invertible, inverted](double next) {
           valueInputPtr->setInvalid(false);
           valueInputPtr->setValue(formatSliderValue(next, integerValue));
+          if (preview) {
+            preview(invertible && *inverted ? -next : next);
+          }
         },
     });
     valueInputPtr->setValue(formatSliderValue(sliderPtr->value(), integerValue));
@@ -685,17 +696,17 @@ namespace settings {
     const double maxValue = setting.maxValue;
     lowInput->setOnChange([lowInputPtr](const std::string& /*text*/) { lowInputPtr->setInvalid(false); });
     lowInput->setOnSubmit([commitInput, lowInputPtr, lowPath, minValue, maxValue](const std::string& /*text*/) {
-      (void)commitInput(lowInputPtr, lowPath, minValue, maxValue, true);
+      commitInput(lowInputPtr, lowPath, minValue, maxValue, true);
     });
     lowInput->setOnFocusLoss([commitInput, lowInputPtr, lowPath, minValue, maxValue] {
-      (void)commitInput(lowInputPtr, lowPath, minValue, maxValue, true);
+      commitInput(lowInputPtr, lowPath, minValue, maxValue, true);
     });
     highInput->setOnChange([highInputPtr](const std::string& /*text*/) { highInputPtr->setInvalid(false); });
     highInput->setOnSubmit([commitInput, highInputPtr, highPath, minValue, maxValue](const std::string& /*text*/) {
-      (void)commitInput(highInputPtr, highPath, minValue, maxValue, false);
+      commitInput(highInputPtr, highPath, minValue, maxValue, false);
     });
     highInput->setOnFocusLoss([commitInput, highInputPtr, highPath, minValue, maxValue] {
-      (void)commitInput(highInputPtr, highPath, minValue, maxValue, false);
+      commitInput(highInputPtr, highPath, minValue, maxValue, false);
     });
 
     wrap->addChild(std::move(slider));
@@ -926,7 +937,8 @@ namespace settings {
             .minHeight = Style::controlHeight * scale,
             .paddingV = Style::spaceXs * scale,
             .paddingH = Style::spaceSm * scale,
-            .radius = Style::scaledRadiusMd(scale),
+            .styleRadius = Style::radiusMd,
+            .styleRadiusScale = scale,
             .onClick = [setOverride = ctx.setOverride, requestRebuild = ctx.requestRebuild, path = std::move(path),
                         inputPtr, selectFolder, extensions = setting.browseFileExtensions,
                         fallbackDirectory = setting.browseFallbackDirectory] {
@@ -1070,6 +1082,58 @@ namespace settings {
     return wrap;
   }
 
+  std::unique_ptr<Flex>
+  SettingsControlFactory::makeLength(const LengthSetting& setting, const std::vector<std::string>& path) {
+    auto& ctx = m_ctx;
+    const float scale = m_scale;
+    const bool percent = setting.value.unit == LengthSpec::Unit::Percent;
+    const int maxPixels = std::max(0, setting.maxPixels);
+    const int maxPercent = std::max(0, setting.maxPercent);
+    const int currentValue = std::clamp(setting.value.value, 0, percent ? maxPercent : maxPixels);
+    // Pixels commit as a TOML integer, percentages as the "N%" string the schema parses.
+    const auto commit = [setOverride = ctx.setOverride, path](LengthSpec length) {
+      if (length.unit == LengthSpec::Unit::Percent) {
+        setOverride(path, formatLength(length));
+      } else {
+        setOverride(path, static_cast<std::int64_t>(length.value));
+      }
+    };
+
+    auto wrap = ui::row({.align = FlexAlign::Center, .gap = Style::spaceSm * scale});
+    wrap->addChild(
+        ui::stepper({
+            .minValue = 0,
+            .maxValue = percent ? maxPercent : maxPixels,
+            .step = 1,
+            .value = currentValue,
+            .scale = scale,
+            .valueSuffix = std::string(percent ? "%" : "px"),
+            .onValueCommitted = [commit, unit = setting.value.unit](int value) {
+              commit(LengthSpec{.value = value, .unit = unit});
+            },
+        })
+    );
+    wrap->addChild(
+        ui::segmented({
+            .options =
+                std::vector<ui::SegmentedOption>{
+                    {.label = "px"},
+                    {.label = "%"},
+                },
+            .selectedIndex = static_cast<std::size_t>(percent ? 1 : 0),
+            .scale = scale,
+            .onChange = [commit, currentValue, maxPixels, maxPercent](std::size_t index) {
+              if (index == 1) {
+                commit(LengthSpec::fromPercent(std::min(currentValue, maxPercent)));
+              } else {
+                commit(LengthSpec::fromPixels(std::min(currentValue, maxPixels)));
+              }
+            },
+        })
+    );
+    return wrap;
+  }
+
   std::unique_ptr<Node> SettingsControlFactory::makeColorSpecPicker(
       const ColorSpecPickerSetting& setting, const std::vector<std::string>& path
   ) {
@@ -1163,48 +1227,100 @@ namespace settings {
     return block;
   }
 
+  std::unique_ptr<ListEditor> SettingsControlFactory::makeListEditor(
+      std::vector<std::string> items, std::vector<SelectOption> suggestedOptions, std::size_t maxItems,
+      const ListChangedCallback& onChanged, const std::string& title, const std::vector<std::string>& path
+  ) {
+    auto listEditor = std::make_unique<ListEditor>();
+    listEditor->setScale(m_scale);
+    listEditor->setMaxItems(maxItems);
+    listEditor->setAddPlaceholder(i18n::tr("settings.controls.list.add-entry-placeholder"));
+    listEditor->setAddLabel(i18n::tr("settings.controls.list.add-entry"));
+    listEditor->setDragTooltip(i18n::tr("settings.controls.list.drag"));
+
+    std::vector<ListEditorOption> options;
+    options.reserve(suggestedOptions.size());
+    for (const auto& opt : suggestedOptions) {
+      options.push_back(ListEditorOption{.value = opt.value, .label = opt.label, .icon = opt.icon});
+    }
+    const bool hasSuggestedOptions = !options.empty();
+    listEditor->setSuggestedOptions(std::move(options));
+
+    const auto binding = wireListEditor(*listEditor, std::move(items), onChanged);
+
+    if (hasSuggestedOptions) {
+      listEditor->setOnAddPickerRequested([openPopup = m_ctx.openSearchPickerPopup, list = binding.items,
+                                           add = binding.add, suggestedOptions = std::move(suggestedOptions), title,
+                                           path] {
+        if (openPopup == nullptr) {
+          return;
+        }
+        std::vector<SelectOption> pickerOptions;
+        pickerOptions.reserve(suggestedOptions.size());
+        for (const auto& opt : suggestedOptions) {
+          if (!std::ranges::contains(*list, opt.value)) {
+            pickerOptions.push_back(opt);
+          }
+        }
+        if (pickerOptions.empty()) {
+          return;
+        }
+        openPopup(
+            SearchPickerOpenRequest{
+                .title = title,
+                .options = std::move(pickerOptions),
+                .placeholder = i18n::tr("ui.controls.search-picker.placeholder"),
+                .emptyText = i18n::tr("ui.controls.search-picker.empty"),
+                .settingPath = path,
+                .onSelect = add,
+            }
+        );
+      });
+    }
+
+    return listEditor;
+  }
+
   void SettingsControlFactory::makeListBlock(Flex& section, const SettingEntry& entry, const ListSetting& list) {
-    auto& ctx = m_ctx;
-    const float scale = m_scale;
-    const bool overridden = (ctx.configService != nullptr && ctx.configService->hasEffectiveOverride(entry.path));
+    const bool overridden = (m_ctx.configService != nullptr && m_ctx.configService->hasEffectiveOverride(entry.path));
+
+    auto block = makeCollectionBlock(entry, overridden);
+    block->addChild(makeListEditor(
+        list.items, list.suggestedOptions, 0,
+        [setOverride = m_ctx.setOverride, path = entry.path](const std::vector<std::string>& items) {
+          setOverride(path, items);
+        },
+        entry.title, entry.path
+    ));
+
+    section.addChild(std::move(block));
+  }
+
+  void SettingsControlFactory::makeShortcutListBlock(
+      Flex& section, const SettingEntry& entry, const ShortcutListSetting& shortcuts
+  ) {
+    const bool overridden = (m_ctx.configService != nullptr && m_ctx.configService->hasEffectiveOverride(entry.path));
 
     auto block = makeCollectionBlock(entry, overridden);
 
-    auto listEditor = std::make_unique<ListEditor>();
-    listEditor->setScale(scale);
-    listEditor->setAddPlaceholder(i18n::tr("settings.controls.list.add-entry-placeholder"));
-    std::vector<ListEditorOption> suggestedOptions;
-    suggestedOptions.reserve(list.suggestedOptions.size());
-    for (const auto& opt : list.suggestedOptions) {
-      suggestedOptions.push_back(ListEditorOption{.value = opt.value, .label = opt.label});
+    std::vector<std::string> itemTypes;
+    itemTypes.reserve(shortcuts.items.size());
+    for (const auto& item : shortcuts.items) {
+      itemTypes.push_back(item.type);
     }
-    listEditor->setSuggestedOptions(std::move(suggestedOptions));
-    listEditor->setItems(list.items);
-    listEditor->setOnAddRequested([setOverride = ctx.setOverride, items = list.items,
-                                   path = entry.path](std::string value) mutable {
-      if (value.empty()) {
-        return;
-      }
-      items.push_back(std::move(value));
-      setOverride(path, items);
-    });
-    listEditor->setOnRemoveRequested([setOverride = ctx.setOverride, items = list.items,
-                                      path = entry.path](std::size_t index) mutable {
-      if (index >= items.size()) {
-        return;
-      }
-      items.erase(items.begin() + static_cast<std::ptrdiff_t>(index));
-      setOverride(path, items);
-    });
-    listEditor->setOnMoveRequested([setOverride = ctx.setOverride, items = list.items,
-                                    path = entry.path](std::size_t from, std::size_t to) mutable {
-      if (from >= items.size() || to >= items.size() || from == to) {
-        return;
-      }
-      std::swap(items[from], items[to]);
-      setOverride(path, items);
-    });
-    block->addChild(std::move(listEditor));
+
+    block->addChild(makeListEditor(
+        std::move(itemTypes), shortcuts.suggestedOptions, shortcuts.maxItems,
+        [setOverride = m_ctx.setOverride, path = entry.path](const std::vector<std::string>& items) {
+          std::vector<ShortcutConfig> configs;
+          configs.reserve(items.size());
+          for (const auto& value : items) {
+            configs.push_back(ShortcutConfig{value});
+          }
+          setOverride(path, configs);
+        },
+        entry.title, entry.path
+    ));
 
     section.addChild(std::move(block));
   }

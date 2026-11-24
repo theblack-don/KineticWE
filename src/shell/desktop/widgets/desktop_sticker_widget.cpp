@@ -1,11 +1,12 @@
 #include "shell/desktop/widgets/desktop_sticker_widget.h"
 
 #include "core/log.h"
-#include "render/core/image_decoder.h"
+#include "render/codecs/codecs.h"
 #include "render/core/renderer.h"
 #include "render/core/texture_manager.h"
 #include "render/scene/node.h"
 #include "ui/builders.h"
+#include "ui/controls/image.h"
 #include "util/file_utils.h"
 
 #include <algorithm>
@@ -50,6 +51,8 @@ void DesktopStickerWidget::create() {
   auto image = ui::image({
       .out = &m_image,
       .fit = ImageFit::Contain,
+      // doLayout sizes the sticker from the aspect ratio, known only once the decode lands.
+      .configure = [this](Image& control) { control.setAsyncReadyCallback([this] { requestLayout(); }); },
   });
   rootNode->addChild(std::move(image));
   setRoot(std::move(rootNode));
@@ -115,7 +118,7 @@ bool DesktopStickerWidget::tryLoadAnimated(Renderer& renderer) {
     return false;
   }
 
-  auto decoded = decodeAnimatedGif(bytes.data(), bytes.size(), kMaxStickerGifFrames, kMaxStickerGifBytes);
+  auto decoded = codecs::decodeAnimatedGif(bytes.data(), bytes.size(), kMaxStickerGifFrames, kMaxStickerGifBytes);
   if (!decoded) {
     kLog.warn("sticker: failed to decode GIF \"{}\": {}", m_imagePath, decoded.error());
     return false;

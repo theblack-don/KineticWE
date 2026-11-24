@@ -2,7 +2,7 @@
 
 #include "config/config_types.h"
 #include "core/timer_manager.h"
-#include "render/core/thumbnail_service.h"
+#include "render/codecs/thumbnail_service.h"
 #include "shell/control_center/control_center_services.h"
 #include "shell/control_center/shortcut_services.h"
 #include "shell/control_center/tab.h"
@@ -16,7 +16,6 @@
 #include <vector>
 
 class AccountsService;
-class AsyncTextureCache;
 class Button;
 class CompositorPlatform;
 class HttpClient;
@@ -50,7 +49,6 @@ public:
 
   std::unique_ptr<Flex> create() override;
   std::unique_ptr<Flex> createHeaderActions() override;
-  void onFrameTick(float deltaMs) override;
   void setActive(bool active) override;
   void onClose() override;
 
@@ -93,7 +91,6 @@ private:
   AccountsService* m_accounts = nullptr;
   Wallpaper* m_wallpaper = nullptr;
   ThumbnailService* m_thumbnails = nullptr;
-  AsyncTextureCache* m_asyncTextures = nullptr;
   ShortcutServices m_services;
   bool m_active = false;
 
@@ -142,6 +139,7 @@ private:
   std::uint32_t m_wallpaperCrispAnimId = 0;
   ThumbnailService::Subscription m_thumbnailPendingSub;
   Signal<>::ScopedConnection m_wallpaperChangedConn;
+  Signal<>::ScopedConnection m_radiusChangedConn;
 
   Label* m_mediaTrack = nullptr;
   Label* m_mediaArtist = nullptr;

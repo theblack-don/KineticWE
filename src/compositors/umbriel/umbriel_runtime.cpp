@@ -11,6 +11,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <iterator>
+#include <optional>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -64,26 +65,12 @@ namespace compositors::umbriel {
       return true;
     }
 
-    [[nodiscard]] bool isSocketPath(const std::string& path) {
+    bool isSocketPath(const std::string& path) {
       struct stat st{};
       return !path.empty() && ::stat(path.c_str(), &st) == 0 && S_ISSOCK(st.st_mode);
     }
 
   } // namespace
-
-  struct UmbrielRuntime::IpcReply {
-    enum class Status {
-      Unavailable,
-      WriteFailed,
-      ReadFailed,
-      NoResponse,
-      InvalidJson,
-      Replied,
-    };
-
-    Status status = Status::Unavailable;
-    std::optional<nlohmann::json> json;
-  };
 
   bool UmbrielRuntime::available() const {
     ensureResolved();
@@ -102,10 +89,11 @@ namespace compositors::umbriel {
   }
 
   std::optional<nlohmann::json> UmbrielRuntime::send(const nlohmann::json& request) const {
+    ensureResolved();
     auto payload = request.dump();
     payload.push_back('\n');
 
-    const auto reply = this->request(payload);
+    const auto reply = exchange(m_socketPath, payload, kRequestTimeout);
     if (!reply.json.has_value() || !reply.json->is_object()) {
       return std::nullopt;
     }
@@ -121,9 +109,23 @@ namespace compositors::umbriel {
     return send(fields).has_value();
   }
 
-  UmbrielRuntime::IpcReply UmbrielRuntime::request(std::string_view payload) const {
-    ensureResolved();
-    if (m_socketPath.empty() || payload.empty()) {
+  std::string findSocketPath() {
+    if (const char* socketPath = std::getenv("UMBRIEL_SOCKET"); socketPath != nullptr && socketPath[0] != '\0') {
+      return socketPath;
+    }
+
+    const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
+    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
+    if (runtimeDir == nullptr || runtimeDir[0] == '\0' || waylandDisplay == nullptr || waylandDisplay[0] == '\0') {
+      return {};
+    }
+
+    std::string fallback = std::string(runtimeDir) + "/umbriel-" + waylandDisplay + ".sock";
+    return isSocketPath(fallback) ? fallback : std::string();
+  }
+
+  IpcReply exchange(const std::string& socketPath, std::string_view payload, std::chrono::milliseconds timeout) {
+    if (socketPath.empty() || payload.empty()) {
       return {IpcReply::Status::Unavailable, std::nullopt};
     }
 
@@ -134,13 +136,13 @@ namespace compositors::umbriel {
 
     sockaddr_un addr{};
     addr.sun_family = AF_UNIX;
-    if (m_socketPath.size() >= sizeof(addr.sun_path)) {
+    if (socketPath.size() >= sizeof(addr.sun_path)) {
       ::close(fd);
       return {IpcReply::Status::Unavailable, std::nullopt};
     }
-    std::memcpy(addr.sun_path, m_socketPath.c_str(), m_socketPath.size() + 1);
+    std::memcpy(addr.sun_path, socketPath.c_str(), socketPath.size() + 1);
 
-    const auto deadline = std::chrono::steady_clock::now() + kRequestTimeout;
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
     if (::connect(fd, reinterpret_cast<const sockaddr*>(&addr), sizeof(addr)) < 0) {
       if (errno != EINPROGRESS || !waitForRequestSocket(fd, POLLOUT, deadline)) {
         ::close(fd);
@@ -207,7 +209,7 @@ namespace compositors::umbriel {
     }
 
     try {
-      return {IpcReply::Status::Replied, nlohmann::json::parse(response)};
+      return {IpcReply::Status::Replied, std::make_optional(nlohmann::json::parse(response))};
     } catch (const nlohmann::json::exception&) {
       return {IpcReply::Status::InvalidJson, std::nullopt};
     }
@@ -454,22 +456,7 @@ namespace compositors::umbriel {
 
   void UmbrielRuntime::resolveSocketPath() const {
     m_resolved = true;
-
-    if (const char* socketPath = std::getenv("UMBRIEL_SOCKET"); socketPath != nullptr && socketPath[0] != '\0') {
-      m_socketPath = socketPath;
-      return;
-    }
-
-    const char* runtimeDir = std::getenv("XDG_RUNTIME_DIR");
-    const char* waylandDisplay = std::getenv("WAYLAND_DISPLAY");
-    if (runtimeDir == nullptr || runtimeDir[0] == '\0' || waylandDisplay == nullptr || waylandDisplay[0] == '\0') {
-      return;
-    }
-
-    const std::string fallback = std::string(runtimeDir) + "/umbriel-" + waylandDisplay + ".sock";
-    if (isSocketPath(fallback)) {
-      m_socketPath = fallback;
-    }
+    m_socketPath = findSocketPath();
   }
 
 } // namespace compositors::umbriel

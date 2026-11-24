@@ -19,6 +19,8 @@
 #include "shell/lockscreen/lockscreen_session_actions.h"
 #include "shell/session/session_action_runner.h"
 #include "shell/wallpaper/wallpaper_geometry.h"
+#include "shell/wayland/capture_globals.h"
+#include "shell/wayland/shell_globals.h"
 #include "ui/palette.h"
 #include "wayland/wayland_connection.h"
 #include "wayland/wayland_seat.h"
@@ -82,6 +84,8 @@ namespace {
       return LockscreenTransitionKind::Golden;
     case LockscreenTransition::Melt:
       return LockscreenTransitionKind::Melt;
+    case LockscreenTransition::Crt:
+      return LockscreenTransitionKind::Crt;
     }
     std::unreachable();
   }
@@ -181,7 +185,7 @@ bool LockScreen::lock() {
   m_lockedAtMillis = bootTimeMillis();
   m_graceAllowed = true;
   kLog.debug("lock requested, grace starts at {}", m_lockedAtMillis);
-  if (!m_wayland->hasSessionLockManager()) {
+  if (m_wayland->extension<ShellGlobals>().sessionLockManager() == nullptr) {
     invalidateDesktopCaptures();
     kLog.warn("session lock protocol unavailable");
     notifyLockAborted();
@@ -224,7 +228,7 @@ bool LockScreen::lock() {
   }
   chooseTransition();
 
-  m_lock = ext_session_lock_manager_v1_lock(m_wayland->sessionLockManager());
+  m_lock = ext_session_lock_manager_v1_lock(m_wayland->extension<ShellGlobals>().sessionLockManager());
   if (m_lock == nullptr) {
     kLog.warn("failed to create session lock object");
     resetLockState();
@@ -376,7 +380,7 @@ void LockScreen::onOutputChange() {
   if (m_lockDeferred) {
     if (m_wayland != nullptr && !m_wayland->outputs().empty()) {
       m_lockDeferred = false;
-      (void)lock();
+      lock();
     }
     return;
   }
@@ -785,7 +789,7 @@ void LockScreen::handleSleepReady() {
   if (m_onReadyForSleep) {
     m_onReadyForSleep();
   }
-  (void)tryFlushPendingAfterLocked();
+  tryFlushPendingAfterLocked();
   flushPendingOutputPowerOff();
 }
 
@@ -978,7 +982,9 @@ void LockScreen::syncInstances() {
 }
 
 bool LockScreen::shouldCaptureDesktop() const {
-  if (m_configService == nullptr || m_wayland == nullptr || !m_wayland->hasScreencopy()) {
+  if (m_configService == nullptr
+      || m_wayland == nullptr
+      || m_wayland->extension<ScreencopyGlobals>().manager() == nullptr) {
     return false;
   }
   const auto& lockscreen = m_configService->config().lockscreen;
@@ -1047,7 +1053,8 @@ bool LockScreen::captureDesktopSnapshots() {
   }
 
   const auto firstCaptureDeadline = std::chrono::steady_clock::now() + screencopy::kBlockingCaptureTimeout;
-  WaylandConnection captureWayland(WaylandConnection::Purpose::Screencopy);
+  WaylandConnection captureWayland(WaylandConnection::Purpose::Sibling);
+  captureWayland.extension<ScreencopyGlobals>();
   std::string setupError;
   if (!captureWayland.connectUntil(firstCaptureDeadline, m_wayland, setupError)) {
     kLog.warn("lockscreen desktop capture setup failed: {}", setupError);
@@ -1137,7 +1144,9 @@ void LockScreen::chooseTransition() {
   if (m_transitionSuppressed) {
     return;
   }
-  if (m_configService == nullptr || m_wayland == nullptr || !m_wayland->hasScreencopy()) {
+  if (m_configService == nullptr
+      || m_wayland == nullptr
+      || m_wayland->extension<ScreencopyGlobals>().manager() == nullptr) {
     return;
   }
 
@@ -1195,6 +1204,7 @@ void LockScreen::chooseTransition() {
     break;
   case LockscreenTransition::Fade:
   case LockscreenTransition::Zoom:
+  case LockscreenTransition::Crt:
     break;
   }
 }
@@ -1204,7 +1214,7 @@ void LockScreen::applyLockscreenStyle(LockSurface& surface) const {
     return;
   }
   const auto& lockscreen = m_configService->config().lockscreen;
-  surface.setBackgroundStyle(lockscreen.blurIntensity, lockscreen.tintIntensity);
+  surface.setBackgroundStyle(lockscreen.blurIntensity, lockscreen.tintIntensity, lockscreen.tintColor);
 }
 
 bool LockScreen::isInteractiveOutput(const WaylandOutput& output) const {
@@ -1474,15 +1484,18 @@ void LockScreen::tryAuthenticate() {
   updatePromptOnSurfaces();
 
   const PamAuthenticator authenticator = m_authenticator;
-  // Authenticate against the "login" stack. If fingerprint is enabled, strip
+  // PAM runs in noctalia-pam-helper against the service set at build time
+  // (-Dpam_service, "login" by default). If fingerprint is enabled, strip
   // pam_fprintd from it: noctalia drives the reader itself over D-Bus and the
   // two can't share the sensor. See docs/fingerprint.md.
-  const std::string pamService = "login";
-  const std::string pamLanguage(i18n::Service::instance().language());
-  const std::string pamStartFailure = i18n::tr("auth.pam.start-failed");
-  std::thread([this, generation, password = std::move(password), authenticator, pamService, pamLanguage,
-               pamStartFailure] mutable {
-    const auto result = authenticator.authenticateCurrentUser(password, pamService, pamLanguage, pamStartFailure);
+  PamAuthenticator::Messages pamMessages{
+      .startFailed = i18n::tr("auth.pam.start-failed"),
+      .userUnavailable = i18n::tr("auth.pam.user-unavailable"),
+      .authenticationFailed = i18n::tr("auth.pam.authentication-failed"),
+  };
+  std::thread([this, generation, password = std::move(password), authenticator,
+               pamMessages = std::move(pamMessages)] mutable {
+    const auto result = authenticator.authenticateCurrentUser(password, pamMessages);
     clearSensitiveString(password);
     DeferredCall::callLater([this, generation, result] { handleAuthResult(generation, result); });
   }).detach();
