@@ -299,7 +299,9 @@ std::unique_ptr<Node> IconsPage::buildTile(
         .width = previewSize,
         .height = previewSize,
     });
-    img->setSourceFile(renderer, previewPath, static_cast<int>(previewSize * 2), true);
+    img->setSourceFile(
+        renderer, previewPath, {.targetSize = static_cast<int>(previewSize * 2), .mipmap = true}
+    );
     card->addChild(std::move(img));
   } else {
     card->addChild(ui::glyph({

@@ -26,6 +26,7 @@ class WaylandConnection;
 class SoundPlayer;
 struct KeyboardEvent;
 struct PointerEvent;
+struct ext_foreign_toplevel_handle_v1;
 struct wl_output;
 
 namespace noctalia::cli {

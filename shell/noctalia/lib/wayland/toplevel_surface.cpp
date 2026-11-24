@@ -88,7 +88,7 @@ bool ToplevelSurface::initialize(wl_output* output, const ToplevelSurfaceConfig&
     auto& decorationGlobals = m_connection.extension<XdgDecorationGlobals>();
     if (decorationGlobals.available()) {
       m_toplevelDecoration =
-          xdg_decoration_manager_v1_get_toplevel_decoration(decorationGlobals.manager(), m_toplevel);
+          zxdg_decoration_manager_v1_get_toplevel_decoration(decorationGlobals.manager(), m_toplevel);
       zxdg_toplevel_decoration_v1_add_listener(m_toplevelDecoration, &kToplevelDecorationListener, this);
       zxdg_toplevel_decoration_v1_set_mode(m_toplevelDecoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
@@ -268,10 +268,9 @@ void ToplevelSurface::
     handleToplevelWmCapabilities(void* /*data*/, xdg_toplevel* /*toplevel*/, wl_array* /*capabilities*/) {}
 
 void ToplevelSurface::handleToplevelDecorationConfigure(
-    void* data, zxdg_toplevel_decoration_v1* /*decoration*/, std::uint32_t mode
+    void* /*data*/, zxdg_toplevel_decoration_v1* /*decoration*/, std::uint32_t mode
 ) {
   if (mode == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE) {
-    auto* self = static_cast<ToplevelSurface*>(data);
     kLog.warn("toplevel: compositor fell back to client-side decorations");
   }
 }
